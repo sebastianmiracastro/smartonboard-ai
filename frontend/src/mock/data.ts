@@ -106,3 +106,12 @@ export const mockDepartments = [
   { id: "dept-004", name: "Ventas", isRrhh: false, isGerencia: false, color: "#f59e0b", employeeCount: 8, roleCount: 2 },
   { id: "dept-005", name: "Gerencia", isRrhh: false, isGerencia: true, color: "#8b5cf6", employeeCount: 2, roleCount: 1 },
 ];
+
+export const mockTasks = [
+  { id: "t1", title: "Leer manual de empleados", category: "lectura", status: "completada", day: 1 },
+  { id: "t2", title: "Reunión con Tech Lead", category: "reunion", status: "completada", day: 2 },
+  { id: "t3", title: "Configurar entorno de desarrollo", category: "configuracion", status: "completada", day: 3 },
+  { id: "t4", title: "Revisar política de seguridad IT", category: "lectura", status: "en_progreso", day: 4 },
+  { id: "t5", title: "Primer PR de prueba", category: "entregable", status: "pendiente", day: 5 },
+  { id: "t6", title: "Code review con el equipo", category: "reunion", status: "pendiente", day: 6 },
+];
