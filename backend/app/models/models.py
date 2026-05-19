@@ -137,3 +137,13 @@ class ChatMessage(Base):
     depth_level = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     conversation = relationship("Conversation", back_populates="messages")
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    document_id = Column(String, ForeignKey("documents.id"), nullable=False)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    chunk_index = Column(Integer, default=0)
+    embedding = Column(Text, nullable=True)  # JSON string del vector
+    created_at = Column(DateTime, server_default=func.now())

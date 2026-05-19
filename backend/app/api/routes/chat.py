@@ -6,6 +6,7 @@ from app.models.models import Conversation, ChatMessage, User
 from app.schemas.schemas import ChatMessageCreate, ChatMessageOut, ConversationOut
 from app.core.dependencies import get_current_user
 import uuid
+import json
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -55,6 +56,15 @@ def send_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from app.services.agent import run_agent
+
+    conv = db.query(Conversation).filter(
+        Conversation.id == conv_id,
+        Conversation.user_id == current_user.id
+    ).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversación no encontrada")
+
     # Guardar mensaje del usuario
     user_msg = ChatMessage(
         conversation_id=conv_id,
@@ -63,13 +73,24 @@ def send_message(
     )
     db.add(user_msg)
     db.commit()
-    db.refresh(user_msg)
 
-    # Respuesta mock del agente — aquí conectaremos LangGraph después
+    # Ejecutar agente
+    result = run_agent(
+        question=data.content,
+        company_id=current_user.company_id,
+        db=db,
+        user_is_rrhh=current_user.system_role == "rrhh",
+        user_is_gerencia=current_user.system_role == "gerencia",
+    )
+
+    # Guardar respuesta del agente
     assistant_msg = ChatMessage(
         conversation_id=conv_id,
         role="assistant",
-        content=f"Recibí tu pregunta: '{data.content}'. Pronto conectaremos el agente IA real.",
+        content=result["answer"],
+        sources=json.dumps(result["sources"]),
+        category=result["category"],
+        depth_level=result["depth_level"],
     )
     db.add(assistant_msg)
     db.commit()
