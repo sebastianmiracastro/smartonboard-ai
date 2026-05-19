@@ -1,18 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Building2, Users, Shield, Crown, Plus, ChevronDown, ChevronUp } from "lucide-react";
-import { mockDepartments } from "@/mock/data";
+import { api } from "@/lib/api";
 
 export default function DepartamentosPage() {
+  const [departments, setDepartments] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await api.getDepartments();
+        setDepartments(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const toggle = (id: string) => setExpanded(expanded === id ? null : id);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="text-slate-400 text-sm">Cargando...</div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">
 
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-white text-2xl font-semibold">Departamentos</h1>
@@ -26,12 +48,11 @@ export default function DepartamentosPage() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Departamentos", value: mockDepartments.length },
-          { label: "Empleados totales", value: mockDepartments.reduce((a, d) => a + d.employeeCount, 0) },
-          { label: "Roles definidos", value: mockDepartments.reduce((a, d) => a + d.roleCount, 0) },
+          { label: "Departamentos", value: departments.length },
+          { label: "Con acceso RR.HH.", value: departments.filter(d => d.is_rrhh).length },
+          { label: "De gerencia", value: departments.filter(d => d.is_gerencia).length },
         ].map((s) => (
           <div key={s.label} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-4 text-center">
             <p className="text-white text-2xl font-semibold">{s.value}</p>
@@ -40,93 +61,58 @@ export default function DepartamentosPage() {
         ))}
       </div>
 
-      {/* Lista departamentos */}
       <div className="flex flex-col gap-3">
-        {mockDepartments.map((dept) => (
+        {departments.map((dept) => (
           <div key={dept.id} className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-
-            {/* Fila principal */}
             <div
               className="flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-[#1e2536]/50 transition-colors"
               onClick={() => toggle(dept.id)}
             >
-              {/* Color dot */}
               <div
                 className="w-3 h-3 rounded-full shrink-0"
-                style={{ backgroundColor: dept.color }}
+                style={{ backgroundColor: dept.color || "#6366f1" }}
               />
-
-              {/* Nombre */}
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-white font-medium">{dept.name}</p>
-                  {dept.isRrhh && (
+                  {dept.is_rrhh && (
                     <span className="flex items-center gap-1 text-xs bg-violet-500/10 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full">
                       <Shield size={10} /> RR.HH.
                     </span>
                   )}
-                  {dept.isGerencia && (
+                  {dept.is_gerencia && (
                     <span className="flex items-center gap-1 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
                       <Crown size={10} /> Gerencia
                     </span>
                   )}
                 </div>
+                {dept.description && (
+                  <p className="text-slate-500 text-xs mt-0.5">{dept.description}</p>
+                )}
               </div>
-
-              {/* Stats */}
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-1.5 text-slate-400 text-sm">
-                  <Users size={14} />
-                  <span>{dept.employeeCount} empleados</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-400 text-sm">
-                  <Building2 size={14} />
-                  <span>{dept.roleCount} roles</span>
-                </div>
-              </div>
-
-              {/* Expand */}
               <div className="text-slate-500">
                 {expanded === dept.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </div>
             </div>
 
-            {/* Expanded — roles */}
             {expanded === dept.id && (
               <div className="border-t border-[#2a3349] px-6 py-4 bg-[#1e2536]/30">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider">Roles</p>
-                  <button className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs transition-colors">
-                    <Plus size={12} /> Agregar rol
-                  </button>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider">Información</p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {[
-                    { label: "Junior", seniority: 1 },
-                    { label: "Mid", seniority: 2 },
-                    { label: "Senior", seniority: 3 },
-                    { label: "Lead", seniority: 4 },
-                  ].slice(0, dept.roleCount).map((role) => (
-                    <div
-                      key={role.label}
-                      className="flex items-center justify-between bg-[#161b27] border border-[#2a3349] rounded-xl px-4 py-3"
-                    >
-                      <div>
-                        <p className="text-white text-sm">
-                          {dept.name === "Recursos Humanos" ? "Analista" : dept.name === "Gerencia" ? "Director" : `Desarrollador`} {role.label}
-                        </p>
-                        <p className="text-slate-500 text-xs mt-0.5">Nivel {role.seniority} de seniority</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {[1, 2, 3, 4].map((n) => (
-                          <div
-                            key={n}
-                            className={`w-2 h-2 rounded-full ${n <= role.seniority ? "bg-indigo-400" : "bg-[#2a3349]"}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-[#161b27] border border-[#2a3349] rounded-xl p-3">
+                    <p className="text-slate-500 text-xs mb-1">Acceso RR.HH.</p>
+                    <p className={`text-sm font-medium ${dept.is_rrhh ? "text-emerald-400" : "text-slate-400"}`}>
+                      {dept.is_rrhh ? "Sí" : "No"}
+                    </p>
+                  </div>
+                  <div className="bg-[#161b27] border border-[#2a3349] rounded-xl p-3">
+                    <p className="text-slate-500 text-xs mb-1">Gerencia</p>
+                    <p className={`text-sm font-medium ${dept.is_gerencia ? "text-amber-400" : "text-slate-400"}`}>
+                      {dept.is_gerencia ? "Sí" : "No"}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

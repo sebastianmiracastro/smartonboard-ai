@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileText, Upload, RefreshCw, Trash2, Shield, Users } from "lucide-react";
-import { mockDocuments } from "@/mock/data";
+import { api } from "@/lib/api";
 
 const statusConfig: Record<string, { label: string; classes: string }> = {
   indexado: { label: "Indexado", classes: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
@@ -17,12 +17,42 @@ const permissionConfig: Record<string, { label: string; classes: string }> = {
 };
 
 export default function DocumentosPage() {
-  const [docs, setDocs] = useState(mockDocuments);
+  const [docs, setDocs] = useState<any[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await api.getDocuments();
+        setDocs(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const deleteDoc = async (id: string) => {
+    try {
+      await api.deleteDocument(id);
+      setDocs(docs.filter(d => d.id !== id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const totalChunks = docs
     .filter(d => d.status === "indexado")
-    .reduce((acc, d) => acc + (d.chunkCount || 0), 0);
+    .reduce((acc, d) => acc + (d.chunk_count || 0), 0);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="text-slate-400 text-sm">Cargando...</div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -141,7 +171,7 @@ export default function DocumentosPage() {
                   <RefreshCw size={14} />
                 </button>
                 <button
-                  onClick={() => setDocs(docs.filter(d => d.id !== doc.id))}
+                  onClick={() => deleteDoc(doc.id)}
                   className="text-slate-500 hover:text-red-400 transition-colors p-1.5 hover:bg-red-500/10 rounded-lg"
                 >
                   <Trash2 size={14} />
