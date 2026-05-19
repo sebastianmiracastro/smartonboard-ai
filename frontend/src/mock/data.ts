@@ -115,3 +115,39 @@ export const mockTasks = [
   { id: "t5", title: "Primer PR de prueba", category: "entregable", status: "pendiente", day: 5 },
   { id: "t6", title: "Code review con el equipo", category: "reunion", status: "pendiente", day: 6 },
 ];
+
+export const mockPlans = [
+  {
+    id: "plan-001",
+    name: "Onboarding Ingeniería Junior",
+    description: "Plan para desarrolladores junior del equipo de ingeniería",
+    targetDepartment: "Ingeniería",
+    targetRole: "Desarrollador Junior",
+    durationDays: 15,
+    taskCount: 12,
+    assignedCount: 2,
+    createdAt: "2026-03-01",
+  },
+  {
+    id: "plan-002",
+    name: "Onboarding Marketing",
+    description: "Plan de incorporación para el área de marketing y comunicaciones",
+    targetDepartment: "Marketing",
+    targetRole: "Analista de Marketing",
+    durationDays: 10,
+    taskCount: 8,
+    assignedCount: 1,
+    createdAt: "2026-03-10",
+  },
+  {
+    id: "plan-003",
+    name: "Onboarding Ventas",
+    description: "Plan para nuevos ejecutivos del equipo comercial",
+    targetDepartment: "Ventas",
+    targetRole: "Ejecutivo de Ventas",
+    durationDays: 12,
+    taskCount: 10,
+    assignedCount: 1,
+    createdAt: "2026-03-15",
+  },
+];
