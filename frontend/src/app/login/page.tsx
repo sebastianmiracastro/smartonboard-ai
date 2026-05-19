@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Zap } from "lucide-react";
+import { api } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,14 +15,21 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulamos autenticación con mock data
-    await new Promise((r) => setTimeout(r, 800));
-    if (email.includes("rrhh") || email === "andrea.salcedo@techcorp.co") {
-      router.push("/dashboard");
-    } else {
-      router.push("/portal/inicio");
+    try {
+      const response = await api.login(email, password);
+      localStorage.setItem("token", response.access_token);
+      const user = await api.getMe();
+      localStorage.setItem("user", JSON.stringify(user));
+      if (user.system_role === "rrhh" || user.system_role === "gerencia") {
+        router.push("/dashboard");
+      } else {
+        router.push("/portal/inicio");
+      }
+    } catch (err: any) {
+      alert(err.message || "Error al iniciar sesión");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

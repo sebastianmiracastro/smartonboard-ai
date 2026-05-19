@@ -1,0 +1,73 @@
+const BASE_URL = "http://localhost:8000";
+
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+}
+
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: "Error desconocido" }));
+    throw new Error(error.detail || "Error en la petición");
+  }
+
+  return res.json();
+}
+
+export const api = {
+  // Auth
+  login: (email: string, password: string) =>
+    request<{ access_token: string; token_type: string }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+
+  // Usuarios
+  getMe: () => request<unknown>("/api/users/me"),
+  getUsers: () => request<unknown[]>("/api/users/"),
+  getUser: (id: string) => request<unknown>(`/api/users/${id}`),
+
+  // Departamentos
+  getDepartments: () => request<unknown[]>("/api/departments/"),
+  createDepartment: (data: unknown) =>
+    request("/api/departments/", { method: "POST", body: JSON.stringify(data) }),
+
+  // Documentos
+  getDocuments: () => request<unknown[]>("/api/documents/"),
+  deleteDocument: (id: string) =>
+    request(`/api/documents/${id}`, { method: "DELETE" }),
+
+  // Planes
+  getPlans: () => request<unknown[]>("/api/plans/"),
+  getPlanTasks: (planId: string) => request<unknown[]>(`/api/plans/${planId}/tasks`),
+
+  // Tareas
+  getMyTasks: () => request<unknown[]>("/api/tasks/my"),
+  completeTask: (id: string) =>
+    request(`/api/tasks/${id}/complete`, { method: "PATCH" }),
+
+  // Chat
+  getConversations: () => request<unknown[]>("/api/chat/conversations"),
+  createConversation: () =>
+    request("/api/chat/conversations", { method: "POST" }),
+  getMessages: (convId: string) =>
+    request<unknown[]>(`/api/chat/conversations/${convId}/messages`),
+  sendMessage: (convId: string, content: string) =>
+    request(`/api/chat/conversations/${convId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+};
