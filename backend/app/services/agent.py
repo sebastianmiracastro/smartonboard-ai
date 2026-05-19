@@ -1,7 +1,7 @@
 from typing import TypedDict, List, Optional, Annotated
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 from app.services.rag import search_similar_chunks, build_context
 from app.core.config import settings

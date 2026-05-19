@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine
 from app.models import models
-from app.api.routes import auth, users, departments, documents, plans, tasks, chat
+from app.api.routes import auth, users, departments, documents, plans, tasks, chat, evaluation
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -27,6 +27,7 @@ app.include_router(documents.router)
 app.include_router(plans.router)
 app.include_router(tasks.router)
 app.include_router(chat.router)
+app.include_router(evaluation.router)
 
 @app.get("/")
 def root():
