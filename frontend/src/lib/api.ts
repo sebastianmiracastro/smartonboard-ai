@@ -36,35 +36,35 @@ export const api = {
     }),
 
   // Usuarios
-  getMe: () => request<unknown>("/api/users/me"),
-  getUsers: () => request<unknown[]>("/api/users/"),
-  getUser: (id: string) => request<unknown>(`/api/users/${id}`),
+  getMe: () => request<any>("/api/users/me"),
+  getUsers: () => request<any[]>("/api/users/"),
+  getUser: (id: string) => request<any>(`/api/users/${id}`),
 
   // Departamentos
-  getDepartments: () => request<unknown[]>("/api/departments/"),
-  createDepartment: (data: unknown) =>
+  getDepartments: () => request<any[]>("/api/departments/"),
+  createDepartment: (data: any) =>
     request("/api/departments/", { method: "POST", body: JSON.stringify(data) }),
 
   // Documentos
-  getDocuments: () => request<unknown[]>("/api/documents/"),
+  getDocuments: () => request<any[]>("/api/documents/"),
   deleteDocument: (id: string) =>
     request(`/api/documents/${id}`, { method: "DELETE" }),
 
   // Planes
-  getPlans: () => request<unknown[]>("/api/plans/"),
-  getPlanTasks: (planId: string) => request<unknown[]>(`/api/plans/${planId}/tasks`),
+  getPlans: () => request<any[]>("/api/plans/"),
+  getPlanTasks: (planId: string) => request<any[]>(`/api/plans/${planId}/tasks`),
 
   // Tareas
-  getMyTasks: () => request<unknown[]>("/api/tasks/my"),
+  getMyTasks: () => request<any[]>("/api/tasks/my"),
   completeTask: (id: string) =>
     request(`/api/tasks/${id}/complete`, { method: "PATCH" }),
 
   // Chat
-  getConversations: () => request<unknown[]>("/api/chat/conversations"),
+  getConversations: () => request<any[]>("/api/chat/conversations"),
   createConversation: () =>
     request("/api/chat/conversations", { method: "POST" }),
   getMessages: (convId: string) =>
-    request<unknown[]>(`/api/chat/conversations/${convId}/messages`),
+    request<any[]>(`/api/chat/conversations/${convId}/messages`),
   sendMessage: (convId: string, content: string) =>
     request(`/api/chat/conversations/${convId}/messages`, {
       method: "POST",
