@@ -1,0 +1,10 @@
+{
+  "model_base": "TinyLlama-1.1B-Chat-v1.0",
+  "model_finetuned": "smartonboard-lora-final",
+  "dataset_size": 15,
+  "epochs": 3,
+  "avg_score_base": 0.542,
+  "avg_score_finetuned": 0.5,
+  "improvement_percent": -7.7,
+  "eval_cases": 4
+}
