@@ -10,16 +10,23 @@ export default function DashboardPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<any>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [me, users] = await Promise.all([
+        const [me, users, summary] = await Promise.all([
           api.getMe(),
           api.getUsers(),
+          fetch("http://localhost:8000/api/evaluation/company/summary", {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`
+            }
+          }).then(r => r.json())
         ]);
         setUser(me);
         setEmployees(users);
+        setSummary(summary);
       } catch {
         router.push("/login");
       } finally {
@@ -52,7 +59,7 @@ export default function DashboardPage() {
     },
     {
       label: "Resolución IA",
-      value: "94%",
+      value: summary ? `${Math.round(summary.ai_resolution_rate * 100)}%` : "—",
       sub: "sin intervención humana",
       subColor: "text-emerald-400",
       icon: Bot,
@@ -61,8 +68,8 @@ export default function DashboardPage() {
     },
     {
       label: "Tiempo promedio",
-      value: "4.2d",
-      sub: "↓ 2.1d vs manual",
+      value: summary ? `${summary.avg_onboarding_days}d` : "—",
+      sub: "días de onboarding",
       subColor: "text-emerald-400",
       icon: TrendingDown,
       iconBg: "bg-amber-500/10",
@@ -177,9 +184,30 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { icon: FileText, label: "Documentos indexados", value: "12", sub: "4.231 chunks", color: "text-blue-400", bg: "bg-blue-500/10" },
-          { icon: Bot, label: "Precisión del agente", value: "98.2%", sub: "últimas 48h", color: "text-violet-400", bg: "bg-violet-500/10" },
-          { icon: Users, label: "Empleados totales", value: employees.length.toString(), sub: "registrados", color: "text-emerald-400", bg: "bg-emerald-500/10" },
+          {
+            icon: FileText,
+            label: "Documentos indexados",
+            value: summary?.total_documents?.toString() || "0",
+            sub: `${summary?.total_chunks || 0} chunks`,
+            color: "text-blue-400",
+            bg: "bg-blue-500/10"
+          },
+          {
+            icon: Bot,
+            label: "Preguntas respondidas",
+            value: summary?.total_questions?.toString() || "0",
+            sub: `${summary?.total_conversations || 0} conversaciones`,
+            color: "text-violet-400",
+            bg: "bg-violet-500/10"
+          },
+          {
+            icon: Users,
+            label: "Empleados totales",
+            value: employees.length.toString(),
+            sub: "registrados",
+            color: "text-emerald-400",
+            bg: "bg-emerald-500/10"
+          },
         ].map((s) => (
           <div key={s.label} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-4 flex items-center gap-4">
             <div className={`w-10 h-10 ${s.bg} rounded-xl flex items-center justify-center shrink-0`}>
