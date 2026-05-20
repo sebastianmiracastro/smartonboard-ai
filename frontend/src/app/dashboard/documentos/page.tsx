@@ -44,6 +44,89 @@ export default function DocumentosPage() {
     }
   };
 
+  const handleUpload = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const token = localStorage.getItem("token");
+
+    try {
+      const res = await fetch("http://localhost:8000/api/documents/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Error al subir documento");
+
+      const data = await res.json();
+
+      // Agregar documento a la lista con estado en_cola
+      setDocs(prev => [...prev, {
+        id: data.id,
+        name: data.nombre,
+        format: data.nombre.split(".").pop(),
+        size_kb: 0,
+        status: "en_cola",
+        progress: 0,
+        chunk_count: 0,
+        uploaded_at: new Date().toISOString(),
+        require_rrhh: false,
+        require_gerencia: false,
+        permissions: { label: "Todos", color: "green" }
+      }]);
+
+      // Polling para actualizar el estado del documento
+      pollDocumentStatus(data.id);
+
+    } catch (err) {
+      alert("Error al subir el documento");
+      console.error(err);
+    }
+  };
+
+  const pollDocumentStatus = (docId: string) => {
+    const token = localStorage.getItem("token");
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("http://localhost:8000/api/documents/", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const doc = data.find((d: any) => d.id === docId);
+
+        if (doc) {
+          setDocs(prev => prev.map(d => d.id === docId ? {
+            ...d,
+            status: doc.status,
+            progress: doc.progress,
+            chunk_count: doc.chunk_count,
+          } : d));
+
+          if (doc.status === "indexado" || doc.status === "error") {
+            clearInterval(interval);
+          }
+        }
+      } catch {
+        clearInterval(interval);
+      }
+    }, 2000);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleUpload(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleUpload(file);
+  };
+
   const totalChunks = docs
     .filter(d => d.status === "indexado")
     .reduce((acc, d) => acc + (d.chunk_count || 0), 0);
@@ -89,16 +172,22 @@ export default function DocumentosPage() {
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); }}
+        onDrop={handleDrop}
         className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors
-          ${dragging ? "border-indigo-500 bg-indigo-500/5" : "border-[#2a3349] hover:border-[#3d4f6e]"}`}
+    ${dragging ? "border-indigo-500 bg-indigo-500/5" : "border-[#2a3349] hover:border-[#3d4f6e]"}`}
       >
         <Upload size={24} className="text-slate-500 mx-auto mb-3" />
         <p className="text-slate-300 text-sm font-medium mb-1">Arrastra archivos aquí</p>
         <p className="text-slate-500 text-xs">PDF, DOCX, TXT — máx. 50MB por archivo</p>
-        <button className="mt-4 border border-[#2a3349] hover:border-[#3d4f6e] text-slate-400 hover:text-slate-200 text-xs px-4 py-2 rounded-lg transition-colors">
+        <label className="mt-4 inline-block border border-[#2a3349] hover:border-[#3d4f6e] text-slate-400 hover:text-slate-200 text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer">
           Seleccionar archivos
-        </button>
+          <input
+            type="file"
+            accept=".pdf,.docx,.txt"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+        </label>
       </div>
 
       {/* Lista documentos */}
