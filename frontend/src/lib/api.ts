@@ -19,6 +19,14 @@ async function request<T>(
     },
   });
 
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+    }
+    throw new Error("Sesión expirada");
+  }
+
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Error desconocido" }));
     throw new Error(error.detail || "Error en la petición");
@@ -56,6 +64,7 @@ export const api = {
 
   // Tareas
   getMyTasks: () => request<any[]>("/api/tasks/my"),
+  getUserTasks: (userId: string) => request<any[]>(`/api/tasks/user/${userId}`),
   completeTask: (id: string) =>
     request(`/api/tasks/${id}/complete`, { method: "PATCH" }),
 

@@ -62,6 +62,14 @@ class User(Base):
     department = relationship("Department", back_populates="users")
     role = relationship("Role", back_populates="users")
 
+    @property
+    def department_name(self) -> str | None:
+        return self.department.name if self.department else None
+
+    @property
+    def role_name(self) -> str | None:
+        return self.role.name if self.role else None
+
 class Document(Base):
     __tablename__ = "documents"
     id = Column(String, primary_key=True, default=gen_uuid)

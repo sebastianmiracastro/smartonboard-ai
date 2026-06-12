@@ -92,6 +92,8 @@ class UserOut(BaseModel):
     department_id: Optional[str]
     role_id: Optional[str]
     start_date: Optional[str]
+    department_name: Optional[str] = None
+    role_name: Optional[str] = None
 
     class Config:
         from_attributes = True

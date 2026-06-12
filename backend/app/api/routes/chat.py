@@ -75,13 +75,19 @@ def send_message(
     db.commit()
 
     # Ejecutar agente
-    result = run_agent(
-        question=data.content,
-        company_id=current_user.company_id,
-        db=db,
-        user_is_rrhh=current_user.system_role == "rrhh",
-        user_is_gerencia=current_user.system_role == "gerencia",
-    )
+    try:
+        result = run_agent(
+            question=data.content,
+            company_id=current_user.company_id,
+            db=db,
+            user_is_rrhh=current_user.system_role == "rrhh",
+            user_is_gerencia=current_user.system_role == "gerencia",
+            user_seniority_level=current_user.role.seniority_level if current_user.role else 1,
+            user_department_id=current_user.department_id,
+        )
+    except Exception as e:
+        print(f"Error en el agente: {e}")
+        raise HTTPException(status_code=500, detail="El agente no pudo procesar la pregunta. Inténtalo de nuevo.")
 
     # Guardar respuesta del agente
     assistant_msg = ChatMessage(

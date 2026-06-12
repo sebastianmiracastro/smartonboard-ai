@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
 from app.models.models import Document, User
 from app.schemas.schemas import DocumentOut
 from app.core.dependencies import get_current_user, require_rrhh
@@ -16,10 +16,9 @@ def process_document_background(
     company_id: str,
     file_bytes: bytes,
     file_format: str,
-    db: Session
 ):
+    db = SessionLocal()
     try:
-        # Actualizar estado a procesando
         doc = db.query(Document).filter(Document.id == document_id).first()
         if not doc:
             return
@@ -27,7 +26,6 @@ def process_document_background(
         doc.progress = 10
         db.commit()
 
-        # Extraer texto
         text = extract_text(file_bytes, file_format)
         if not text.strip():
             doc.status = "error"
@@ -37,7 +35,6 @@ def process_document_background(
         doc.progress = 30
         db.commit()
 
-        # Dividir en chunks
         chunks = chunk_text(text, chunk_size=500, overlap=50)
         if not chunks:
             doc.status = "error"
@@ -47,27 +44,29 @@ def process_document_background(
         doc.progress = 50
         db.commit()
 
-        # Generar embeddings
         embeddings = generate_embeddings_batch(chunks)
 
         doc.progress = 80
         db.commit()
 
-        # Indexar en base de datos
         count = index_document_chunks(db, document_id, company_id, chunks, embeddings)
 
-        # Finalizar
         doc.status = "indexado"
         doc.progress = 100
         doc.chunk_count = count
         db.commit()
 
     except Exception as e:
-        doc = db.query(Document).filter(Document.id == document_id).first()
-        if doc:
-            doc.status = "error"
-            db.commit()
+        try:
+            doc = db.query(Document).filter(Document.id == document_id).first()
+            if doc:
+                doc.status = "error"
+                db.commit()
+        except Exception:
+            pass
         print(f"Error procesando documento: {e}")
+    finally:
+        db.close()
 
 @router.get("/", response_model=List[DocumentOut])
 def get_documents(
@@ -78,9 +77,14 @@ def get_documents(
         Document.company_id == current_user.company_id
     )
     if current_user.system_role not in ["rrhh", "gerencia"]:
+        seniority = current_user.role.seniority_level if current_user.role else 1
         query = query.filter(
             Document.require_rrhh == False,
-            Document.require_gerencia == False
+            Document.require_gerencia == False,
+        ).filter(
+            (Document.min_seniority == None) | (Document.min_seniority <= seniority)
+        ).filter(
+            (Document.dept_permission == None) | (Document.dept_permission == current_user.department_id)
         )
     return query.all()
 
@@ -121,7 +125,6 @@ async def upload_document(
         current_user.company_id,
         file_bytes,
         ext,
-        db
     )
 
     return {

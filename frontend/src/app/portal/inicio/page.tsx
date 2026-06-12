@@ -30,9 +30,9 @@ export default function PortalInicioPage() {
   }, []);
 
   const completedCount = tasks.filter(t => t.status === "completada").length;
-  const progress = tasks.length > 0
-    ? Math.round((completedCount / tasks.length) * 100)
-    : Math.round((user?.onboarding_day / user?.onboarding_total_days) * 100) || 0;
+  const progress = user && user.onboarding_total_days > 0
+    ? Math.round((user.onboarding_day / user.onboarding_total_days) * 100)
+    : 0;
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">

@@ -42,6 +42,12 @@ def get_plan_tasks(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_rrhh)
 ):
+    plan = db.query(OnboardingPlan).filter(
+        OnboardingPlan.id == plan_id,
+        OnboardingPlan.company_id == current_user.company_id
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan no encontrado")
     return db.query(OnboardingTask).filter(
         OnboardingTask.plan_id == plan_id
     ).order_by(OnboardingTask.day_number).all()

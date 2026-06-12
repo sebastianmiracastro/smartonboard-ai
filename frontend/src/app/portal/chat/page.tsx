@@ -68,10 +68,19 @@ export default function ChatPage() {
 
     try {
       const response = await api.sendMessage(convId, content);
+      let sources: Message["sources"] = undefined;
+      if (response.sources) {
+        try {
+          sources = JSON.parse(response.sources);
+        } catch {
+          sources = undefined;
+        }
+      }
       const assistantMsg: Message = {
         id: response.id,
         role: "assistant",
         content: response.content,
+        sources,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {

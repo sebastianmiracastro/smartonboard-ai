@@ -27,7 +27,10 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_rrhh)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.company_id == current_user.company_id
+    ).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return user

@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Zap, Home, MessageSquare, CheckSquare, BookOpen, LogOut } from "lucide-react";
+import { api } from "@/lib/api";
 
 const navItems = [
   { icon: Home, label: "Mi inicio", href: "/portal/inicio" },
@@ -13,6 +15,26 @@ const navItems = [
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    api.getMe().then(setUser).catch(() => router.push("/login"));
+  }, []);
+
+  const initials = user?.full_name
+    ?.split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2) ?? "—";
+
+  const progress = user && user.onboarding_total_days > 0
+    ? Math.round((user.onboarding_day / user.onboarding_total_days) * 100)
+    : 0;
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    router.push("/login");
+  };
 
   return (
     <div className="min-h-screen bg-[#0f1117] flex">
@@ -34,22 +56,28 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <div className="px-4 py-4 border-b border-[#2a3349]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/20 rounded-full flex items-center justify-center shrink-0">
-              <span className="text-indigo-400 text-xs font-semibold">CM</span>
+              <span className="text-indigo-400 text-xs font-semibold">{initials}</span>
             </div>
             <div className="min-w-0">
-              <p className="text-white text-sm font-medium truncate">Carlos Mejía</p>
-              <p className="text-slate-500 text-xs truncate">Dev Junior · Ingeniería</p>
+              <p className="text-white text-sm font-medium truncate">
+                {user?.full_name ?? "—"}
+              </p>
+              <p className="text-slate-500 text-xs truncate">
+                {[user?.role_name, user?.department_name].filter(Boolean).join(" · ") || "—"}
+              </p>
             </div>
           </div>
 
           {/* Progreso */}
           <div className="mt-3">
             <div className="flex justify-between mb-1">
-              <span className="text-slate-500 text-xs">Día 5 de 15</span>
-              <span className="text-indigo-400 text-xs font-medium">60%</span>
+              <span className="text-slate-500 text-xs">
+                Día {user?.onboarding_day ?? 0} de {user?.onboarding_total_days ?? 0}
+              </span>
+              <span className="text-indigo-400 text-xs font-medium">{progress}%</span>
             </div>
             <div className="h-1.5 bg-[#2a3349] rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 rounded-full" style={{ width: "60%" }} />
+              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progress}%` }} />
             </div>
           </div>
         </div>
@@ -78,7 +106,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {/* Logout */}
         <div className="px-2 pb-4 border-t border-[#2a3349] pt-4">
           <button
-            onClick={() => router.push("/login")}
+            onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors w-full"
           >
             <LogOut size={18} />

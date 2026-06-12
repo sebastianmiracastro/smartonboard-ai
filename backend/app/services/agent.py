@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 from app.services.rag import search_similar_chunks, build_context
+from app.models.models import Document
 from app.core.config import settings
 import json
 
@@ -13,12 +14,14 @@ class AgentState(TypedDict):
     question: str
     context: str
     answer: str
-    sources: List[str]
+    sources: List[dict]
     category: str
     depth_level: str
     company_id: str
     user_is_rrhh: bool
     user_is_gerencia: bool
+    user_seniority_level: int
+    user_department_id: Optional[str]
     db: object
 
 # ─── NODOS DEL GRAFO ─────────────────────────────────────────────────────────
@@ -31,10 +34,17 @@ def retrieve_context(state: AgentState) -> AgentState:
         query=state["question"],
         user_is_rrhh=state["user_is_rrhh"],
         user_is_gerencia=state["user_is_gerencia"],
+        user_seniority_level=state["user_seniority_level"],
+        user_department_id=state["user_department_id"],
         top_k=5
     )
     context = build_context(chunks)
-    sources = list(set([doc_id for _, doc_id, _ in chunks]))
+    doc_ids = list(set([doc_id for _, doc_id, _ in chunks]))
+    doc_names = {}
+    if doc_ids:
+        docs = db.query(Document).filter(Document.id.in_(doc_ids)).all()
+        doc_names = {d.id: d.name for d in docs}
+    sources = [{"id": doc_id, "name": doc_names.get(doc_id, doc_id)} for doc_id in doc_ids]
     return {**state, "context": context, "sources": sources}
 
 def classify_question(state: AgentState) -> AgentState:
@@ -150,7 +160,9 @@ def run_agent(
     company_id: str,
     db: Session,
     user_is_rrhh: bool = False,
-    user_is_gerencia: bool = False
+    user_is_gerencia: bool = False,
+    user_seniority_level: int = 1,
+    user_department_id: Optional[str] = None,
 ) -> dict:
     result = agent.invoke({
         "question": question,
@@ -162,6 +174,8 @@ def run_agent(
         "company_id": company_id,
         "user_is_rrhh": user_is_rrhh,
         "user_is_gerencia": user_is_gerencia,
+        "user_seniority_level": user_seniority_level,
+        "user_department_id": user_department_id,
         "db": db,
     })
 

@@ -36,6 +36,8 @@ def search_similar_chunks(
     query: str,
     user_is_rrhh: bool = False,
     user_is_gerencia: bool = False,
+    user_seniority_level: int = 1,
+    user_department_id: str = None,
     top_k: int = 5
 ) -> List[Tuple[str, str, float]]:
     # Generar embedding de la pregunta
@@ -50,7 +52,11 @@ def search_similar_chunks(
     if not user_is_rrhh and not user_is_gerencia:
         doc_query = doc_query.filter(
             Document.require_rrhh == False,
-            Document.require_gerencia == False
+            Document.require_gerencia == False,
+        ).filter(
+            (Document.min_seniority == None) | (Document.min_seniority <= user_seniority_level)
+        ).filter(
+            (Document.dept_permission == None) | (Document.dept_permission == user_department_id)
         )
     elif user_is_rrhh and not user_is_gerencia:
         doc_query = doc_query.filter(
