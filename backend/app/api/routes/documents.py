@@ -76,7 +76,11 @@ def get_documents(
     query = db.query(Document).filter(
         Document.company_id == current_user.company_id
     )
-    if current_user.system_role not in ["rrhh", "gerencia"]:
+    if current_user.system_role == "gerencia":
+        pass  # gerencia ve todo
+    elif current_user.system_role == "rrhh":
+        query = query.filter(Document.require_gerencia == False)
+    else:
         seniority = current_user.role.seniority_level if current_user.role else 1
         query = query.filter(
             Document.require_rrhh == False,
