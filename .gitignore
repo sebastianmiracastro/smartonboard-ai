@@ -1,0 +1,22 @@
+# Respaldos temporales de la base de datos
+*.db.bak-*
+backend/smartonboard.db.bak-*
+
+# Python
+__pycache__/
+*.pyc
+backend/venv/
+backend/.venv/
+
+# Entorno
+.env
+backend/.env
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+
+# Sistema
+.DS_Store
+Thumbs.db
