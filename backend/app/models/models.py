@@ -58,6 +58,19 @@ class User(Base):
     onboarding_plan_id = Column(String, ForeignKey("onboarding_plans.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
+
+    # Datos de RR.HH. (información del expediente del empleado)
+    document_id = Column(String, nullable=True)        # cédula / documento
+    gender = Column(String, nullable=True)             # masculino / femenino / otro
+    birth_date = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    marital_status = Column(String, nullable=True)     # soltero / casado / union_libre / divorciado / viudo
+    num_children = Column(Integer, default=0)
+    contract_type = Column(String, nullable=True)      # indefinido / fijo / obra_labor / prestacion_servicios
+    base_salary = Column(Float, default=0)             # salario mensual
+    bank_name = Column(String, nullable=True)
+    bank_account = Column(String, nullable=True)
     company = relationship("Company", back_populates="users")
     department = relationship("Department", back_populates="users")
     role = relationship("Role", back_populates="users")
@@ -145,6 +158,113 @@ class ChatMessage(Base):
     depth_level = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     conversation = relationship("Conversation", back_populates="messages")
+
+class PayrollConcept(Base):
+    """Concepto de nómina definido por RR.HH. (genérico, sin valores legales precargados)."""
+    __tablename__ = "payroll_concepts"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False)
+    name = Column(String, nullable=False)
+    # devengado | deduccion | aporte_patronal | provision
+    type = Column(String, nullable=False, default="devengado")
+    # fijo | porcentaje
+    calc_type = Column(String, nullable=False, default="fijo")
+    value = Column(Float, default=0)  # monto fijo o % según calc_type
+    description = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class PayrollPeriod(Base):
+    """Período de nómina (ej. Junio 2026)."""
+    __tablename__ = "payroll_periods"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False)
+    name = Column(String, nullable=False)
+    period_start = Column(String, nullable=True)
+    period_end = Column(String, nullable=True)
+    kind = Column(String, default="nomina")         # nomina | terminacion
+    frequency = Column(String, nullable=True)       # (obsoleto) se conserva por compatibilidad
+    factor = Column(Float, default=1.0)             # proporción según los días liquidados (mes = 30 días)
+    days = Column(Integer, nullable=True)           # días liquidados
+    month_key = Column(String, nullable=True)       # YYYY-MM para agrupar por mes
+    status = Column(String, default="procesada")  # borrador | procesada | pagada
+    total_devengado = Column(Float, default=0)
+    total_deduccion = Column(Float, default=0)
+    total_aportes = Column(Float, default=0)
+    total_neto = Column(Float, default=0)
+    employee_count = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    payslips = relationship("Payslip", back_populates="period", cascade="all, delete-orphan")
+
+class Payslip(Base):
+    """Comprobante de pago individual de un empleado en un período.
+
+    Guarda un snapshot autocontenido (nombre/fechas/días del período y datos del
+    empleado) para que el comprobante sea un documento histórico independiente.
+    """
+    __tablename__ = "payslips"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    period_id = Column(String, ForeignKey("payroll_periods.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    employee_name = Column(String)
+    employee_document = Column(String, nullable=True)
+    employee_role = Column(String, nullable=True)
+    # Snapshot del período (para que el comprobante no dependa del período)
+    period_name = Column(String, nullable=True)
+    period_start = Column(String, nullable=True)
+    period_end = Column(String, nullable=True)
+    days = Column(Integer, nullable=True)
+    kind = Column(String, nullable=True)            # nomina | terminacion
+    monthly_salary = Column(Float, default=0)       # salario mensual de referencia
+    base_salary = Column(Float, default=0)          # salario liquidado en el período
+    total_devengado = Column(Float, default=0)
+    total_deduccion = Column(Float, default=0)
+    total_aportes = Column(Float, default=0)
+    net_pay = Column(Float, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    period = relationship("PayrollPeriod", back_populates="payslips")
+    items = relationship("PayslipItem", back_populates="payslip", cascade="all, delete-orphan")
+
+class PayslipItem(Base):
+    """Línea de un comprobante: un concepto aplicado con su monto calculado."""
+    __tablename__ = "payslip_items"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    payslip_id = Column(String, ForeignKey("payslips.id"), nullable=False)
+    concept_id = Column(String, nullable=True)
+    concept_name = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # devengado | deduccion | aporte_patronal | provision
+    amount = Column(Float, default=0)
+    payslip = relationship("Payslip", back_populates="items")
+
+class PayrollNovelty(Base):
+    """Novedad individual de un colaborador (bonificación extra, retiro, descuento, etc.)
+    que se aplica en la próxima liquidación de nómina."""
+    __tablename__ = "payroll_novelties"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    employee_name = Column(String)
+    concept_name = Column(String, nullable=False)
+    # devengado | deduccion | retiro
+    type = Column(String, nullable=False, default="devengado")
+    amount = Column(Float, default=0)
+    description = Column(String, nullable=True)
+    applied = Column(Boolean, default=False)
+    period_id = Column(String, nullable=True)       # período donde se aplicó
+    created_at = Column(DateTime, server_default=func.now())
+
+class UserChangeLog(Base):
+    """Historial de modificaciones del expediente de un empleado (auditoría)."""
+    __tablename__ = "user_change_logs"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    changed_by_id = Column(String, nullable=True)
+    changed_by_name = Column(String, nullable=True)
+    field = Column(String, nullable=False)
+    field_label = Column(String, nullable=True)
+    old_value = Column(String, nullable=True)
+    new_value = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"

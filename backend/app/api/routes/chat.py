@@ -58,12 +58,21 @@ def send_message(
 ):
     from app.services.agent import run_agent
 
+    from app.services.agent import generate_title
+
     conv = db.query(Conversation).filter(
         Conversation.id == conv_id,
         Conversation.user_id == current_user.id
     ).first()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
+
+    # Historial previo (antes de guardar el mensaje actual) para dar memoria al agente
+    previous = db.query(ChatMessage).filter(
+        ChatMessage.conversation_id == conv_id
+    ).order_by(ChatMessage.created_at).all()
+    history = [{"role": m.role, "content": m.content} for m in previous]
+    is_first_exchange = len(history) == 0
 
     # Guardar mensaje del usuario
     user_msg = ChatMessage(
@@ -84,6 +93,7 @@ def send_message(
             user_is_gerencia=current_user.system_role == "gerencia",
             user_seniority_level=current_user.role.seniority_level if current_user.role else 1,
             user_department_id=current_user.department_id,
+            history=history,
         )
     except Exception as e:
         print(f"Error en el agente: {e}")
@@ -99,7 +109,32 @@ def send_message(
         depth_level=result["depth_level"],
     )
     db.add(assistant_msg)
+
+    # Título automático en el primer intercambio (o si sigue con el título por defecto)
+    if is_first_exchange or not conv.title or conv.title == "Nueva conversación":
+        conv.title = generate_title(data.content, result["answer"])
+        db.add(conv)
+
     db.commit()
     db.refresh(assistant_msg)
 
     return assistant_msg
+
+
+@router.delete("/conversations/{conv_id}")
+def delete_conversation(
+    conv_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    conv = db.query(Conversation).filter(
+        Conversation.id == conv_id,
+        Conversation.user_id == current_user.id
+    ).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversación no encontrada")
+
+    db.query(ChatMessage).filter(ChatMessage.conversation_id == conv_id).delete()
+    db.delete(conv)
+    db.commit()
+    return {"ok": True}

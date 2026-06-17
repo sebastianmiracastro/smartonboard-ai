@@ -47,11 +47,19 @@ export const api = {
   getMe: () => request<any>("/api/users/me"),
   getUsers: () => request<any[]>("/api/users/"),
   getUser: (id: string) => request<any>(`/api/users/${id}`),
+  createUser: (data: any) =>
+    request<any>("/api/users/", { method: "POST", body: JSON.stringify(data) }),
+  updateUser: (id: string, data: any) =>
+    request<any>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getUserHistory: (id: string) => request<any[]>(`/api/users/${id}/history`),
 
   // Departamentos
   getDepartments: () => request<any[]>("/api/departments/"),
   createDepartment: (data: any) =>
     request("/api/departments/", { method: "POST", body: JSON.stringify(data) }),
+
+  // Roles
+  getRoles: () => request<any[]>("/api/roles/"),
 
   // Documentos
   getDocuments: () => request<any[]>("/api/documents/"),
@@ -71,12 +79,43 @@ export const api = {
   // Chat
   getConversations: () => request<any[]>("/api/chat/conversations"),
   createConversation: () =>
-    request("/api/chat/conversations", { method: "POST" }),
+    request<any>("/api/chat/conversations", { method: "POST" }),
+  deleteConversation: (convId: string) =>
+    request(`/api/chat/conversations/${convId}`, { method: "DELETE" }),
   getMessages: (convId: string) =>
     request<any[]>(`/api/chat/conversations/${convId}/messages`),
   sendMessage: (convId: string, content: string) =>
-    request(`/api/chat/conversations/${convId}/messages`, {
+    request<any>(`/api/chat/conversations/${convId}/messages`, {
       method: "POST",
       body: JSON.stringify({ content }),
     }),
+
+  // Nómina
+  getPayrollMetrics: () => request<any>("/api/payroll/metrics"),
+  getConcepts: () => request<any[]>("/api/payroll/concepts"),
+  createConcept: (data: any) =>
+    request<any>("/api/payroll/concepts", { method: "POST", body: JSON.stringify(data) }),
+  updateConcept: (id: string, data: any) =>
+    request<any>(`/api/payroll/concepts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteConcept: (id: string) =>
+    request(`/api/payroll/concepts/${id}`, { method: "DELETE" }),
+  getPeriods: () => request<any[]>("/api/payroll/periods"),
+  getPeriod: (id: string) => request<any>(`/api/payroll/periods/${id}`),
+  createPeriod: (data: any) =>
+    request<any>("/api/payroll/periods", { method: "POST", body: JSON.stringify(data) }),
+  createSettlement: (data: any) =>
+    request<any>("/api/payroll/settlement", { method: "POST", body: JSON.stringify(data) }),
+  payPeriod: (id: string) =>
+    request<any>(`/api/payroll/periods/${id}/pay`, { method: "PATCH" }),
+  deletePeriod: (id: string) =>
+    request(`/api/payroll/periods/${id}`, { method: "DELETE" }),
+  getMonthlySummary: () => request<any[]>("/api/payroll/monthly-summary"),
+  getEmployeePayslips: (userId: string) =>
+    request<any[]>(`/api/payroll/employees/${userId}/payslips`),
+  getNovelties: (onlyPending = false) =>
+    request<any[]>(`/api/payroll/novelties${onlyPending ? "?only_pending=true" : ""}`),
+  createNovelty: (data: any) =>
+    request<any>("/api/payroll/novelties", { method: "POST", body: JSON.stringify(data) }),
+  deleteNovelty: (id: string) =>
+    request(`/api/payroll/novelties/${id}`, { method: "DELETE" }),
 };

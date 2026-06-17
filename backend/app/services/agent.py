@@ -1,7 +1,7 @@
 from typing import TypedDict, List, Optional, Annotated
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from sqlalchemy.orm import Session
 from app.services.rag import search_similar_chunks, build_context
 from app.models.models import Document
@@ -17,6 +17,7 @@ class AgentState(TypedDict):
     sources: List[dict]
     category: str
     depth_level: str
+    history: List[dict]
     company_id: str
     user_is_rrhh: bool
     user_is_gerencia: bool
@@ -75,6 +76,30 @@ def classify_question(state: AgentState) -> AgentState:
 
     return {**state, "category": category, "depth_level": depth}
 
+SYSTEM_PROMPT = """Eres Sara, la asistente virtual de onboarding de la empresa.
+Acompañas a los nuevos empleados durante sus primeras semanas y haces que se
+sientan bienvenidos y orientados.
+
+Tu estilo:
+- Cálida, cercana y profesional. Hablas en español de forma natural, como una
+  compañera que de verdad quiere ayudar, no como un robot que recita.
+- Conversacional: tienes en cuenta lo que ya se habló antes en la conversación
+  y le das continuidad sin repetir lo obvio.
+- Concreta y útil: cuando aplica, das pasos claros y ordenados, sin rodeos.
+- Empática: si la persona está perdida o abrumada, la tranquilizas.
+
+Cómo usar la información:
+- Cuando en el contexto haya fragmentos de los documentos de la empresa, basa tu
+  respuesta en ellos y menciónalos con naturalidad ("según la guía de...", etc.).
+- Si la pregunta es sobre algo específico de la empresa y no hay información en
+  los documentos, dilo con honestidad y sugiere a quién acudir (por ejemplo,
+  RR.HH. o su líder directo). Nunca inventes políticas, cifras, nombres ni fechas.
+- Para preguntas generales de onboarding, dudas de bienvenida o conversación
+  casual (saludos, agradecimientos), responde con tu propio criterio de forma
+  amable y humana, aunque no haya documentos.
+- Mantén las respuestas enfocadas: ni demasiado cortas ni un muro de texto."""
+
+
 def generate_answer(state: AgentState) -> AgentState:
     # Si no hay API key usamos respuesta mock
     if not settings.OPENAI_API_KEY:
@@ -84,31 +109,28 @@ def generate_answer(state: AgentState) -> AgentState:
     try:
         llm = ChatOpenAI(
             model="gpt-4o-mini",
-            temperature=0.3,
+            temperature=0.6,
             openai_api_key=settings.OPENAI_API_KEY
         )
 
-        system_prompt = """Eres un asistente de onboarding empresarial.
-Tu trabajo es ayudar a los nuevos empleados respondiendo sus preguntas
-basándote ÚNICAMENTE en la información de los documentos de la empresa.
+        messages = [SystemMessage(content=SYSTEM_PROMPT)]
 
-Reglas:
-- Responde siempre en español
-- Si la información no está en los documentos, dilo claramente
-- Sé conciso y directo
-- No inventes información
-- Si hay información relevante, cítala naturalmente"""
+        # Memoria conversacional: últimos turnos de la conversación
+        for h in (state.get("history") or [])[-10:]:
+            if h.get("role") == "user":
+                messages.append(HumanMessage(content=h["content"]))
+            elif h.get("role") == "assistant":
+                messages.append(AIMessage(content=h["content"]))
 
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"""
-Contexto de documentos:
-{state["context"] if state["context"] else "No hay documentos disponibles sobre este tema."}
+        context = state["context"] if state["context"] else "No hay fragmentos de documentos relevantes para esta pregunta."
+        messages.append(HumanMessage(content=f"""Contexto de documentos de la empresa (puede estar vacío):
+\"\"\"
+{context}
+\"\"\"
 
 Pregunta del empleado: {state["question"]}
 
-Responde de forma clara y útil.""")
-        ]
+Responde de forma natural, cálida y útil siguiendo tu estilo."""))
 
         response = llm.invoke(messages)
         answer = response.content
@@ -134,6 +156,38 @@ def generate_mock_answer(question: str, context: str) -> str:
         return "No tengo acceso a información sobre salarios en los documentos disponibles para tu perfil. Te recomiendo contactar directamente a RR.HH."
     else:
         return "Entiendo tu pregunta. Basándome en los documentos disponibles de la empresa puedo ayudarte. ¿Podrías ser más específico sobre lo que necesitas saber?"
+
+# ─── TÍTULO AUTOMÁTICO DE LA CONVERSACIÓN ────────────────────────────────────
+
+def generate_title(question: str, answer: str = "") -> str:
+    """Genera un título corto que resume el tema de la conversación."""
+    fallback = (question or "").strip()
+    if len(fallback) > 45:
+        fallback = fallback[:45].rsplit(" ", 1)[0] + "…"
+    fallback = fallback or "Nueva conversación"
+
+    if not settings.OPENAI_API_KEY:
+        return fallback
+
+    try:
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.2,
+            openai_api_key=settings.OPENAI_API_KEY,
+            max_tokens=20,
+        )
+        messages = [
+            SystemMessage(content=(
+                "Resume el tema de la conversación en un título muy corto, "
+                "máximo 5 palabras, en español. Devuelve SOLO el título, sin "
+                "comillas, sin punto final y sin la palabra 'título'."
+            )),
+            HumanMessage(content=f"Pregunta: {question}\nRespuesta: {answer[:300]}"),
+        ]
+        title = llm.invoke(messages).content.strip().strip('"').strip("'").rstrip(".")
+        return title[:60] if title else fallback
+    except Exception:
+        return fallback
 
 # ─── CONSTRUIR GRAFO ─────────────────────────────────────────────────────────
 
@@ -163,6 +217,7 @@ def run_agent(
     user_is_gerencia: bool = False,
     user_seniority_level: int = 1,
     user_department_id: Optional[str] = None,
+    history: Optional[List[dict]] = None,
 ) -> dict:
     result = agent.invoke({
         "question": question,
@@ -171,6 +226,7 @@ def run_agent(
         "sources": [],
         "category": "",
         "depth_level": "",
+        "history": history or [],
         "company_id": company_id,
         "user_is_rrhh": user_is_rrhh,
         "user_is_gerencia": user_is_gerencia,

@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Zap, LayoutDashboard, Users, FileText,
-  Building2, ClipboardList, Settings, LogOut, Menu, X
+  Building2, ClipboardList, Settings, LogOut, Menu, X, Wallet
 } from "lucide-react";
 import { api } from "@/lib/api";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Users, label: "Empleados", href: "/dashboard/empleados" },
+  { icon: Wallet, label: "Nómina", href: "/dashboard/nomina", rrhhOnly: true },
   { icon: FileText, label: "Documentos", href: "/dashboard/documentos" },
   { icon: Building2, label: "Departamentos", href: "/dashboard/departamentos" },
   { icon: ClipboardList, label: "Planes", href: "/dashboard/planes" },
@@ -59,6 +60,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Nav */}
         <nav className="flex-1 px-2 py-4 flex flex-col gap-1">
           {navItems.map((item) => {
+            if (item.rrhhOnly && user && !["rrhh", "gerencia"].includes(user.system_role)) {
+              return null;
+            }
             const active = pathname === item.href;
             return (
               <button

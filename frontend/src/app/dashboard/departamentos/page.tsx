@@ -2,19 +2,31 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Users, Shield, Crown, Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { Building2, Users, Shield, Crown, Plus, ChevronDown, ChevronUp, X } from "lucide-react";
 import { api } from "@/lib/api";
+
+const COLORS = ["#6366f1", "#ec4899", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#ef4444"];
+const emptyDept = { name: "", description: "", color: "#6366f1", is_rrhh: false, is_gerencia: false };
 
 export default function DepartamentosPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ ...emptyDept });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadDepartments = async () => {
+    const data = await api.getDepartments();
+    setDepartments(data);
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await api.getDepartments();
-        setDepartments(data);
+        await loadDepartments();
       } catch (err) {
         console.error(err);
       } finally {
@@ -25,6 +37,30 @@ export default function DepartamentosPage() {
   }, []);
 
   const toggle = (id: string) => setExpanded(expanded === id ? null : id);
+
+  const openModal = () => {
+    setForm({ ...emptyDept });
+    setError("");
+    setShowModal(true);
+  };
+
+  const handleCreate = async () => {
+    setError("");
+    if (!form.name.trim()) {
+      setError("El nombre del departamento es obligatorio.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.createDepartment(form);
+      setShowModal(false);
+      await loadDepartments();
+    } catch (err: any) {
+      setError(err.message || "No se pudo crear el departamento.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -42,7 +78,10 @@ export default function DepartamentosPage() {
             Estructura organizacional y control de acceso
           </p>
         </div>
-        <button className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
+        <button
+          onClick={openModal}
+          className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors"
+        >
           <Plus size={16} />
           Nuevo departamento
         </button>
@@ -119,6 +158,86 @@ export default function DepartamentosPage() {
           </div>
         ))}
       </div>
+
+      {/* Modal nuevo departamento */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !saving && setShowModal(false)}
+        >
+          <div
+            className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+              <h2 className="text-white text-lg font-semibold">Nuevo departamento</h2>
+              <button onClick={() => !saving && setShowModal(false)} className="text-slate-500 hover:text-slate-200 transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-4">
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg px-3 py-2">{error}</div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-slate-400 text-xs">Nombre *</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Ej. Tecnología"
+                  className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-slate-400 text-xs">Descripción</label>
+                <input
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Breve descripción del área"
+                  className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-slate-400 text-xs">Color</label>
+                <div className="flex gap-2">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setForm({ ...form, color: c })}
+                      className={`w-7 h-7 rounded-full transition-transform ${form.color === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#161b27] scale-110" : ""}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={form.is_rrhh} onChange={(e) => setForm({ ...form, is_rrhh: e.target.checked })} className="accent-indigo-500" />
+                  <Shield size={14} className="text-violet-400" /> Acceso de RR.HH.
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={form.is_gerencia} onChange={(e) => setForm({ ...form, is_gerencia: e.target.checked })} className="accent-indigo-500" />
+                  <Crown size={14} className="text-amber-400" /> Departamento de gerencia
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+              <button onClick={() => setShowModal(false)} disabled={saving} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl transition-colors disabled:opacity-40">
+                Cancelar
+              </button>
+              <button onClick={handleCreate} disabled={saving} className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
+                {saving ? "Creando..." : "Crear departamento"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
