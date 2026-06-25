@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ArrowRight, Plus, X, Pencil, History } from "lucide-react";
+import { Search, ArrowRight, Plus, X, Pencil, History, KeyRound, Power, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
 
 function fmtDate(iso?: string) {
@@ -67,6 +67,41 @@ export default function EmpleadosPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<any[]>([]);
+
+  // Acciones rápidas de la tabla
+  const [pwdTarget, setPwdTarget] = useState<any | null>(null);
+  const [pwdValue, setPwdValue] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdDone, setPwdDone] = useState(false);
+  const [pwdError, setPwdError] = useState("");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const openPwd = (emp: any) => {
+    setPwdTarget(emp); setPwdValue(""); setShowPwd(false); setPwdError(""); setPwdDone(false);
+  };
+  const savePwd = async () => {
+    if (pwdValue.trim().length < 6) { setPwdError("La contraseña debe tener al menos 6 caracteres."); return; }
+    setPwdSaving(true); setPwdError("");
+    try {
+      await api.changeUserPassword(pwdTarget.id, pwdValue.trim());
+      setPwdDone(true);
+      setTimeout(() => setPwdTarget(null), 1200);
+    } catch (e: any) {
+      setPwdError(e.message || "No se pudo cambiar la contraseña.");
+    } finally {
+      setPwdSaving(false);
+    }
+  };
+  const toggleStatus = async (emp: any) => {
+    const next = emp.status === "inactivo" ? "activo" : "inactivo";
+    setTogglingId(emp.id);
+    try {
+      const updated = await api.updateUser(emp.id, { status: next });
+      setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, ...updated } : e)));
+    } catch (e) { console.error(e); }
+    finally { setTogglingId(null); }
+  };
 
   const loadEmployees = async () => {
     const data = await api.getUsers();
@@ -256,8 +291,8 @@ export default function EmpleadosPage() {
           <span className="col-span-4 text-slate-500 text-xs uppercase tracking-wider">Empleado</span>
           <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Rol sistema</span>
           <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Estado</span>
-          <span className="col-span-3 text-slate-500 text-xs uppercase tracking-wider">Progreso</span>
-          <span className="col-span-1"></span>
+          <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Progreso</span>
+          <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider text-right">Acciones</span>
         </div>
 
         {filtered.length === 0 ? (
@@ -292,7 +327,7 @@ export default function EmpleadosPage() {
                 </span>
               </div>
 
-              <div className="col-span-3">
+              <div className="col-span-2">
                 {emp.status === "onboarding" ? (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-[#2a3349] rounded-full overflow-hidden">
@@ -312,7 +347,26 @@ export default function EmpleadosPage() {
                 )}
               </div>
 
-              <div className="col-span-1 flex justify-end gap-1">
+              <div className="col-span-2 flex justify-end gap-1">
+                <button
+                  onClick={() => openPwd(emp)}
+                  title="Restablecer contraseña"
+                  className="text-slate-500 hover:text-indigo-400 transition-colors p-1.5 hover:bg-indigo-500/10 rounded-lg"
+                >
+                  <KeyRound size={15} />
+                </button>
+                <button
+                  onClick={() => toggleStatus(emp)}
+                  disabled={togglingId === emp.id}
+                  title={emp.status === "inactivo" ? "Activar empleado" : "Inactivar empleado"}
+                  className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                    emp.status === "inactivo"
+                      ? "text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                      : "text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                  }`}
+                >
+                  <Power size={15} />
+                </button>
                 <button
                   onClick={() => openEdit(emp)}
                   title="Editar empleado"
@@ -611,6 +665,52 @@ export default function EmpleadosPage() {
                 {saving ? "Guardando..." : mode === "create" ? "Crear empleado" : "Guardar cambios"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal restablecer contraseña */}
+      {pwdTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !pwdSaving && setPwdTarget(null)}>
+          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+              <h2 className="text-white text-lg font-semibold flex items-center gap-2">
+                <KeyRound size={18} className="text-indigo-400" /> Restablecer contraseña
+              </h2>
+              <button onClick={() => !pwdSaving && setPwdTarget(null)} className="text-slate-500 hover:text-slate-200"><X size={18} /></button>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-3">
+              <p className="text-slate-400 text-sm">
+                Nueva contraseña para <span className="text-white">{pwdTarget.full_name}</span>.
+              </p>
+              {pwdError && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg px-3 py-2">{pwdError}</div>}
+              {pwdDone ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-lg px-3 py-2">Contraseña actualizada ✓</div>
+              ) : (
+                <div className="relative">
+                  <input
+                    type={showPwd ? "text" : "password"}
+                    value={pwdValue}
+                    onChange={(e) => setPwdValue(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter") savePwd(); }}
+                    className="w-full bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl pl-3 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button type="button" onClick={() => setShowPwd((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              )}
+            </div>
+            {!pwdDone && (
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+                <button onClick={() => setPwdTarget(null)} disabled={pwdSaving} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl disabled:opacity-40">Cancelar</button>
+                <button onClick={savePwd} disabled={pwdSaving} className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
+                  {pwdSaving ? "Guardando..." : "Restablecer"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

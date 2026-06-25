@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
 from app.models.models import User, Role, Department, UserChangeLog
-from app.schemas.schemas import UserOut, UserCreate, UserUpdate, UserChangeLogOut
+from app.schemas.schemas import UserOut, UserCreate, UserUpdate, UserChangeLogOut, PasswordChange
 from app.core.security import hash_password
 from app.core.dependencies import get_current_user, require_rrhh
+from app.services.onboarding import auto_assign_plans_for_user, pause_running_steps
 
 router = APIRouter(prefix="/api/users", tags=["Usuarios"])
 
@@ -98,6 +99,11 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Asignar automáticamente los planes del cargo (si los hay)
+    auto_assign_plans_for_user(db, user)
+    db.commit()
+    db.refresh(user)
     return user
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -129,10 +135,13 @@ def update_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     updates = data.model_dump(exclude_unset=True)
+    role_changed = False
     for field, value in updates.items():
         old = getattr(user, field, None)
         if old == value:
             continue  # sin cambio real
+        if field == "role_id":
+            role_changed = True
         # Registrar en el historial de auditoría
         db.add(UserChangeLog(
             user_id=user.id,
@@ -147,7 +156,51 @@ def update_user(
 
     db.commit()
     db.refresh(user)
+
+    # Si cambió el cargo, asignar los planes automáticos del nuevo rol
+    if role_changed:
+        auto_assign_plans_for_user(db, user)
+        db.commit()
+        db.refresh(user)
+
+    # Si el empleado queda inactivo, se pausa el cronómetro de sus pasos en curso
+    if updates.get("status") == "inactivo":
+        pause_running_steps(db, user)
+        db.commit()
     return user
+
+@router.patch("/{user_id}/password")
+def change_user_password(
+    user_id: str,
+    data: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    """RR.HH./gerencia restablece la contraseña de un empleado de su empresa."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.company_id == current_user.company_id
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    pwd = (data.password or "").strip()
+    if len(pwd) < 6:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres.")
+
+    user.hashed_password = hash_password(pwd)
+    # Auditoría (sin guardar la contraseña en claro)
+    db.add(UserChangeLog(
+        user_id=user.id,
+        changed_by_id=current_user.id,
+        changed_by_name=current_user.full_name,
+        field="password",
+        field_label="Contraseña",
+        old_value=None,
+        new_value="(restablecida)",
+    ))
+    db.commit()
+    return {"mensaje": "Contraseña actualizada"}
 
 @router.get("/{user_id}/history", response_model=List[UserChangeLogOut])
 def user_history(

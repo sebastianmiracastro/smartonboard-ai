@@ -1,7 +1,7 @@
 from app.db.database import SessionLocal
 from app.models.models import (
     Company, Department, Role, User, OnboardingPlan, OnboardingTask,
-    PayrollConcept, PayrollPeriod, Payslip, PayslipItem
+    EmployeeTask, PayrollConcept, PayrollPeriod, Payslip, PayslipItem
 )
 from app.core.security import hash_password
 
@@ -287,6 +287,41 @@ def seed():
         ]
         for t in tasks:
             db.add(t)
+
+        # Tareas asignadas a los empleados en onboarding (instancias reales del plan).
+        # Carlos (user-001) va por el día 5: primeros días completados, resto pendiente.
+        carlos_tasks = [
+            ("Leer manual de empleados", "lectura", 1, "completada"),
+            ("Reunión de bienvenida con RR.HH.", "reunion", 1, "completada"),
+            ("Configurar entorno de desarrollo", "configuracion", 2, "completada"),
+            ("Reunión con Tech Lead", "reunion", 2, "completada"),
+            ("Revisar política de seguridad IT", "lectura", 3, "en_progreso"),
+            ("Primer PR de prueba", "entregable", 5, "pendiente"),
+        ]
+        for title, cat, day, status in carlos_tasks:
+            db.add(EmployeeTask(user_id="user-001", title=title, category=cat,
+                                day_number=day, status=status))
+
+        # Laura (user-002) recién empieza: casi todo pendiente.
+        laura_tasks = [
+            ("Leer manual de empleados", "lectura", 1, "completada"),
+            ("Reunión de bienvenida con RR.HH.", "reunion", 1, "pendiente"),
+            ("Configurar herramientas de marketing", "configuracion", 2, "pendiente"),
+        ]
+        for title, cat, day, status in laura_tasks:
+            db.add(EmployeeTask(user_id="user-002", title=title, category=cat,
+                                day_number=day, status=status))
+
+        # Sebastián (user-003) casi termina.
+        sebas_tasks = [
+            ("Leer manual de empleados", "lectura", 1, "completada"),
+            ("Capacitación de producto", "lectura", 3, "completada"),
+            ("Acompañar primera llamada de ventas", "entregable", 8, "completada"),
+            ("Cierre de onboarding con líder", "reunion", 12, "pendiente"),
+        ]
+        for title, cat, day, status in sebas_tasks:
+            db.add(EmployeeTask(user_id="user-003", title=title, category=cat,
+                                day_number=day, status=status))
 
         db.commit()
         print("Datos iniciales creados exitosamente.")

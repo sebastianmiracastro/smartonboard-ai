@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine
 from app.models import models
 from app.db.migrate import run_migrations
-from app.api.routes import auth, users, departments, roles, documents, plans, tasks, chat, evaluation, payroll
+from app.api.routes import auth, users, departments, roles, documents, plans, tasks, chat, evaluation, payroll, config
 
 models.Base.metadata.create_all(bind=engine)
 run_migrations()
@@ -32,6 +32,7 @@ app.include_router(tasks.router)
 app.include_router(chat.router)
 app.include_router(evaluation.router)
 app.include_router(payroll.router)
+app.include_router(config.router)
 
 @app.get("/")
 def root():

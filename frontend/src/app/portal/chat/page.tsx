@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, FileText, Bot, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Send, FileText, Bot, Plus, Trash2, MessageSquare, Wrench } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface Message {
@@ -9,7 +9,15 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   sources?: { name: string; page?: number }[];
+  tools?: string[];
 }
+
+const TOOL_LABELS: Record<string, string> = {
+  buscar_en_documentos: "📄 Buscó en documentos",
+  consultar_mis_tareas: "📋 Consultó tus tareas",
+  completar_tarea: "✅ Completó una tarea",
+  escalar_a_rrhh: "🚀 Avisó a RR.HH.",
+};
 
 interface Conversation {
   id: string;
@@ -40,6 +48,16 @@ function parseSources(raw?: string | null): Message["sources"] {
   }
 }
 
+function parseTools(raw?: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const tools = JSON.parse(raw);
+    return Array.isArray(tools) && tools.length > 0 ? tools : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [convId, setConvId] = useState<string | null>(null);
@@ -62,6 +80,7 @@ export default function ChatPage() {
       role: m.role,
       content: m.content,
       sources: parseSources(m.sources),
+      tools: parseTools(m.tools_used),
     }));
     setMessages([WELCOME, ...restored]);
   };
@@ -155,6 +174,7 @@ export default function ChatPage() {
         role: "assistant",
         content: response.content,
         sources: parseSources(response.sources),
+        tools: parseTools(response.tools_used),
       };
       setMessages((prev) => [...prev, assistantMsg]);
       // Refrescar la lista para reflejar el título automático generado
@@ -267,6 +287,22 @@ export default function ChatPage() {
                 >
                   {msg.content}
                 </div>
+
+                {msg.tools && msg.tools.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {msg.tools.map((t, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-2.5 py-1"
+                      >
+                        <Wrench size={10} className="text-indigo-400" />
+                        <span className="text-indigo-300 text-xs">
+                          {TOOL_LABELS[t] || t}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="flex flex-wrap gap-2">

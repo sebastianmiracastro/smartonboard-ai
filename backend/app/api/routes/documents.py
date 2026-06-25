@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+import json
+
+from app.services.tagging import CATEGORIES
 from app.db.database import get_db, SessionLocal
-from app.models.models import Document, User
+from app.models.models import Document, User, Company, Role, Department
 from app.schemas.schemas import DocumentOut
 from app.core.dependencies import get_current_user, require_rrhh
 from app.services.document_processor import extract_text, chunk_text
 from app.services.embeddings import generate_embeddings_batch
 from app.services.rag import index_document_chunks
+from app.services.tagging import tag_document
 
 router = APIRouter(prefix="/api/documents", tags=["Documentos"])
 
@@ -16,6 +20,7 @@ def process_document_background(
     company_id: str,
     file_bytes: bytes,
     file_format: str,
+    manual_category: Optional[str] = None,
 ):
     db = SessionLocal()
     try:
@@ -35,7 +40,7 @@ def process_document_background(
         doc.progress = 30
         db.commit()
 
-        chunks = chunk_text(text, chunk_size=500, overlap=50)
+        chunks = chunk_text(text)  # contextos coherentes (parámetros por defecto)
         if not chunks:
             doc.status = "error"
             db.commit()
@@ -46,10 +51,50 @@ def process_document_background(
 
         embeddings = generate_embeddings_batch(chunks)
 
-        doc.progress = 80
+        doc.progress = 70
         db.commit()
 
-        count = index_document_chunks(db, document_id, company_id, chunks, embeddings)
+        # Categorización temática: etiqueta cada chunk (categoría/tema/complejidad)
+        # y mapea el documento a los cargos relevantes (LLM si hay clave, si no [] = todos).
+        company = db.query(Company).filter(Company.id == company_id).first()
+        roles = [
+            {"id": r.id, "name": r.name}
+            for r in db.query(Role).join(Department, Role.department_id == Department.id)
+            .filter(Department.company_id == company_id).all()
+        ]
+        tagging = tag_document(
+            doc_name=doc.name,
+            chunks=chunks,
+            roles=roles,
+            api_key=company.openai_api_key if company else None,
+            model=(company.ai_model if company else None) or "gpt-4o-mini",
+        )
+
+        # Categoría: si RR.HH. la fijó manualmente, manda sobre la auto-detectada
+        if manual_category in CATEGORIES:
+            for t in tagging["chunks"]:
+                t["category"] = manual_category
+            doc.primary_category = manual_category
+        else:
+            doc.primary_category = tagging["primary_category"]
+
+        # Si el documento se restringió a un cargo (acceso), ese cargo también define
+        # su relevancia temática para las métricas.
+        if doc.role_permission:
+            target_roles = [doc.role_permission]
+            cargo_json = json.dumps(target_roles)
+            for t in tagging["chunks"]:
+                t["cargo_ids"] = cargo_json
+        else:
+            target_roles = tagging["target_role_ids"]
+        doc.target_role_ids = json.dumps(target_roles)
+
+        doc.progress = 85
+        db.commit()
+
+        count = index_document_chunks(
+            db, document_id, company_id, chunks, embeddings, tags=tagging["chunks"]
+        )
 
         doc.status = "indexado"
         doc.progress = 100
@@ -89,6 +134,8 @@ def get_documents(
             (Document.min_seniority == None) | (Document.min_seniority <= seniority)
         ).filter(
             (Document.dept_permission == None) | (Document.dept_permission == current_user.department_id)
+        ).filter(
+            (Document.role_permission == None) | (Document.role_permission == current_user.role_id)
         )
     return query.all()
 
@@ -96,8 +143,12 @@ def get_documents(
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    require_rrhh: bool = False,
-    require_gerencia: bool = False,
+    category: Optional[str] = Form(None),          # categoría de conocimiento (una de las 5) o auto
+    role_permission: Optional[str] = Form(None),   # cargo específico, o vacío = general
+    dept_permission: Optional[str] = Form(None),   # departamento específico, o vacío = general
+    min_seniority: Optional[int] = Form(None),
+    require_rrhh: bool = Form(False),
+    require_gerencia: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_rrhh)
 ):
@@ -108,6 +159,26 @@ async def upload_document(
     if ext not in ["pdf", "docx", "txt"]:
         raise HTTPException(status_code=400, detail="Formato no soportado. Use PDF, DOCX o TXT.")
 
+    # Normalizar vacíos a None
+    category = category or None
+    role_permission = role_permission or None
+    dept_permission = dept_permission or None
+
+    if category and category not in CATEGORIES:
+        raise HTTPException(status_code=400, detail="Categoría inválida.")
+    if role_permission:
+        role = db.query(Role).join(Department, Role.department_id == Department.id).filter(
+            Role.id == role_permission, Department.company_id == current_user.company_id
+        ).first()
+        if not role:
+            raise HTTPException(status_code=400, detail="Cargo inválido para tu empresa.")
+    if dept_permission:
+        dept = db.query(Department).filter(
+            Department.id == dept_permission, Department.company_id == current_user.company_id
+        ).first()
+        if not dept:
+            raise HTTPException(status_code=400, detail="Departamento inválido para tu empresa.")
+
     doc = Document(
         company_id=current_user.company_id,
         name=file.filename,
@@ -117,6 +188,9 @@ async def upload_document(
         uploaded_by=current_user.id,
         require_rrhh=require_rrhh,
         require_gerencia=require_gerencia,
+        role_permission=role_permission,
+        dept_permission=dept_permission,
+        min_seniority=min_seniority,
     )
     db.add(doc)
     db.commit()
@@ -129,6 +203,7 @@ async def upload_document(
         current_user.company_id,
         file_bytes,
         ext,
+        category,
     )
 
     return {

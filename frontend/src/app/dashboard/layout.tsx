@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Zap, LayoutDashboard, Users, FileText,
-  Building2, ClipboardList, Settings, LogOut, Menu, X, Wallet
+  SlidersHorizontal, ClipboardList, Settings, LogOut, Menu, X, Wallet
 } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -13,7 +13,7 @@ const navItems = [
   { icon: Users, label: "Empleados", href: "/dashboard/empleados" },
   { icon: Wallet, label: "Nómina", href: "/dashboard/nomina", rrhhOnly: true },
   { icon: FileText, label: "Documentos", href: "/dashboard/documentos" },
-  { icon: Building2, label: "Departamentos", href: "/dashboard/departamentos" },
+  { icon: SlidersHorizontal, label: "Parametrización", href: "/dashboard/parametrizacion", rrhhOnly: true },
   { icon: ClipboardList, label: "Planes", href: "/dashboard/planes" },
   { icon: Settings, label: "Configuración", href: "/dashboard/configuracion" },
 ];

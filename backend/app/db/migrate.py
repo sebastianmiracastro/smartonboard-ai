@@ -9,6 +9,14 @@ from app.db.database import engine
 
 # tabla -> { columna: definición SQL }
 COLUMNS = {
+    "companies": {
+        "openai_api_key": "TEXT",
+        "ai_model": "VARCHAR DEFAULT 'gpt-4o-mini'",
+        "ai_temperature": "FLOAT DEFAULT 0.4",
+        "agent_name": "VARCHAR DEFAULT 'Sara'",
+        "welcome_message": "TEXT",
+        "rag_top_k": "INTEGER DEFAULT 5",
+    },
     "payroll_periods": {
         "frequency": "VARCHAR",
         "factor": "FLOAT DEFAULT 1.0",
@@ -25,6 +33,40 @@ COLUMNS = {
         "days": "INTEGER",
         "kind": "VARCHAR",
         "monthly_salary": "FLOAT DEFAULT 0",
+    },
+    "chat_messages": {
+        "tools_used": "TEXT",
+        "matched_category": "VARCHAR",
+        "answer_confidence": "FLOAT",
+        "comprehension_score": "FLOAT",
+    },
+    "documents": {
+        "primary_category": "VARCHAR",
+        "target_role_ids": "TEXT",
+    },
+    "document_chunks": {
+        "category": "VARCHAR",
+        "topic": "VARCHAR",
+        "complexity": "VARCHAR",
+        "cargo_ids": "TEXT",
+    },
+    "onboarding_plans": {
+        "auto_assign": "BOOLEAN DEFAULT 0",
+        "is_active": "BOOLEAN DEFAULT 1",
+        "pass_threshold": "INTEGER DEFAULT 70",
+    },
+    "onboarding_tasks": {
+        "order_index": "INTEGER DEFAULT 0",
+        "document_id": "VARCHAR",
+    },
+    "employee_tasks": {
+        "employee_plan_id": "VARCHAR",
+        "order_index": "INTEGER DEFAULT 0",
+        "estimated_minutes": "INTEGER DEFAULT 0",
+        "time_spent_seconds": "INTEGER DEFAULT 0",
+        "started_at": "DATETIME",
+        "last_resumed_at": "DATETIME",
+        "document_id": "VARCHAR",
     },
     "users": {
         "document_id": "VARCHAR",

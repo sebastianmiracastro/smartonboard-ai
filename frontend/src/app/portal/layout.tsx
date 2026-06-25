@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 const navItems = [
   { icon: Home, label: "Mi inicio", href: "/portal/inicio" },
   { icon: MessageSquare, label: "Chat IA", href: "/portal/chat" },
-  { icon: CheckSquare, label: "Mis tareas", href: "/portal/tareas" },
+  { icon: CheckSquare, label: "Mi plan", href: "/portal/tareas" },
   { icon: BookOpen, label: "Recursos", href: "/portal/recursos" },
 ];
 

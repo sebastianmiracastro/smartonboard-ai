@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
-from app.models.models import Conversation, ChatMessage, User
+from app.models.models import Conversation, ChatMessage, User, Company
 from app.schemas.schemas import ChatMessageCreate, ChatMessageOut, ConversationOut
 from app.core.dependencies import get_current_user
 import uuid
@@ -83,21 +83,42 @@ def send_message(
     db.add(user_msg)
     db.commit()
 
+    # Configuración del agente de la empresa (clave de IA, modelo, etc.)
+    company = db.query(Company).filter(Company.id == current_user.company_id).first()
+    company_key = company.openai_api_key if company else None
+    company_model = (company.ai_model if company else None) or "gpt-4o-mini"
+    company_temperature = company.ai_temperature if (company and company.ai_temperature is not None) else 0.4
+    company_agent_name = (company.agent_name if company else None) or "Sara"
+    company_top_k = (company.rag_top_k if company else None) or 5
+
     # Ejecutar agente
     try:
         result = run_agent(
             question=data.content,
             company_id=current_user.company_id,
             db=db,
+            user_id=current_user.id,
             user_is_rrhh=current_user.system_role == "rrhh",
             user_is_gerencia=current_user.system_role == "gerencia",
             user_seniority_level=current_user.role.seniority_level if current_user.role else 1,
             user_department_id=current_user.department_id,
+            user_role_id=current_user.role_id,
             history=history,
+            openai_api_key=company_key,
+            ai_model=company_model,
+            ai_temperature=company_temperature,
+            agent_name=company_agent_name,
+            rag_top_k=company_top_k,
         )
     except Exception as e:
         print(f"Error en el agente: {e}")
         raise HTTPException(status_code=500, detail="El agente no pudo procesar la pregunta. Inténtalo de nuevo.")
+
+    # Clasificar también la pregunta del usuario (la categoría vive en la pregunta;
+    # así las métricas que agregan mensajes de usuario quedan pobladas).
+    user_msg.category = result["category"]
+    user_msg.depth_level = result["depth_level"]
+    db.add(user_msg)
 
     # Guardar respuesta del agente
     assistant_msg = ChatMessage(
@@ -105,14 +126,21 @@ def send_message(
         role="assistant",
         content=result["answer"],
         sources=json.dumps(result["sources"]),
+        tools_used=json.dumps(result["tools_used"]),
         category=result["category"],
         depth_level=result["depth_level"],
+        matched_category=result.get("matched_category"),
+        answer_confidence=result.get("answer_confidence"),
+        comprehension_score=result.get("comprehension_score"),
     )
     db.add(assistant_msg)
 
     # Título automático en el primer intercambio (o si sigue con el título por defecto)
     if is_first_exchange or not conv.title or conv.title == "Nueva conversación":
-        conv.title = generate_title(data.content, result["answer"])
+        conv.title = generate_title(
+            data.content, result["answer"],
+            api_key=company_key, model=company_model,
+        )
         db.add(conv)
 
     db.commit()

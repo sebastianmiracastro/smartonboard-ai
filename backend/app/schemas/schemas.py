@@ -28,6 +28,28 @@ class CompanyOut(BaseModel):
     class Config:
         from_attributes = True
 
+# ─── CONFIGURACIÓN DEL AGENTE IA ─────────────────────────────────────────────
+
+class AgentConfigOut(BaseModel):
+    """Config del agente que se devuelve a la UI. La clave nunca se expone en
+    claro: solo informamos si existe y un fragmento enmascarado."""
+    agent_name: str
+    welcome_message: Optional[str] = None
+    ai_model: str
+    ai_temperature: float
+    rag_top_k: int
+    has_api_key: bool
+    api_key_preview: Optional[str] = None
+
+class AgentConfigUpdate(BaseModel):
+    agent_name: Optional[str] = None
+    welcome_message: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_temperature: Optional[float] = None
+    rag_top_k: Optional[int] = None
+    # None = no tocar la clave; "" = borrarla; cualquier otro valor = guardarla
+    openai_api_key: Optional[str] = None
+
 # ─── DEPARTMENT ──────────────────────────────────────────────────────────────
 
 class DepartmentCreate(BaseModel):
@@ -53,6 +75,7 @@ class DepartmentOut(BaseModel):
 
 class RoleCreate(BaseModel):
     name: str
+    department_id: str
     description: Optional[str] = None
     seniority_level: int = 1
     seniority_label: str = "Junior"
@@ -146,6 +169,9 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class PasswordChange(BaseModel):
+    password: str
+
 # ─── DOCUMENT ────────────────────────────────────────────────────────────────
 
 class DocumentOut(BaseModel):
@@ -160,6 +186,10 @@ class DocumentOut(BaseModel):
     uploaded_at: Optional[datetime]
     require_rrhh: bool
     require_gerencia: bool
+    primary_category: Optional[str] = None
+    role_permission: Optional[str] = None
+    dept_permission: Optional[str] = None
+    min_seniority: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -172,26 +202,91 @@ class OnboardingPlanCreate(BaseModel):
     target_role_id: Optional[str] = None
     target_department_id: Optional[str] = None
     duration_days: int = 15
+    auto_assign: bool = False
+    pass_threshold: int = 70
+
+class OnboardingPlanUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    target_role_id: Optional[str] = None
+    target_department_id: Optional[str] = None
+    duration_days: Optional[int] = None
+    auto_assign: Optional[bool] = None
+    is_active: Optional[bool] = None
+    pass_threshold: Optional[int] = None
 
 class OnboardingPlanOut(BaseModel):
     id: str
     company_id: str
     name: str
     description: Optional[str]
+    target_role_id: Optional[str] = None
+    target_department_id: Optional[str] = None
     duration_days: int
+    auto_assign: bool = False
+    is_active: bool = True
+    pass_threshold: int = 70
+    task_count: int = 0
     created_at: Optional[datetime]
 
     class Config:
         from_attributes = True
 
-# ─── ONBOARDING TASK ─────────────────────────────────────────────────────────
+# ─── CUESTIONARIO (preguntas y opciones de un paso) ──────────────────────────
+
+class QuestionOptionCreate(BaseModel):
+    text: str
+    is_correct: bool = False
+    order_index: int = 0
+
+class QuestionOptionOut(BaseModel):
+    id: str
+    text: str
+    is_correct: bool
+    order_index: int
+
+    class Config:
+        from_attributes = True
+
+class QuestionCreate(BaseModel):
+    text: str
+    qtype: str = "single"            # single | multiple
+    category: Optional[str] = None
+    order_index: int = 0
+    options: List[QuestionOptionCreate] = []
+
+class QuestionOut(BaseModel):
+    id: str
+    text: str
+    qtype: str
+    category: Optional[str] = None
+    order_index: int
+    options: List[QuestionOptionOut] = []
+
+    class Config:
+        from_attributes = True
+
+# ─── ONBOARDING TASK (paso del plan) ─────────────────────────────────────────
 
 class OnboardingTaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     day_number: int = 1
-    category: str = "lectura"
+    category: str = "lectura"        # lectura | reunion | documento | cuestionario | tarea | configuracion | entregable
+    order_index: int = 0
     estimated_minutes: int = 30
+    document_id: Optional[str] = None
+    questions: List[QuestionCreate] = []
+
+class OnboardingTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    day_number: Optional[int] = None
+    category: Optional[str] = None
+    order_index: Optional[int] = None
+    estimated_minutes: Optional[int] = None
+    document_id: Optional[str] = None
+    questions: Optional[List[QuestionCreate]] = None
 
 class OnboardingTaskOut(BaseModel):
     id: str
@@ -200,10 +295,103 @@ class OnboardingTaskOut(BaseModel):
     description: Optional[str]
     day_number: int
     category: str
+    order_index: int = 0
     estimated_minutes: int
+    document_id: Optional[str] = None
+    document_name: Optional[str] = None
+    questions: List[QuestionOut] = []
 
     class Config:
         from_attributes = True
+
+# ─── ASIGNACIÓN DE PLANES ────────────────────────────────────────────────────
+
+class AssignPlanRequest(BaseModel):
+    user_id: str
+
+class EmployeePlanOut(BaseModel):
+    id: str
+    user_id: str
+    plan_id: str
+    plan_name: Optional[str]
+    status: str
+    attempt_number: int
+    score: Optional[float] = None
+    pass_threshold: int = 70
+    time_spent_seconds: int = 0
+    assigned_at: Optional[datetime]
+    completed_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+# ─── EJECUCIÓN DEL PLAN (portal del empleado) ────────────────────────────────
+
+class EmployeeStepOut(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    category: str
+    status: str
+    order_index: int = 0
+    day_number: Optional[int] = None
+    estimated_minutes: int = 0
+    time_spent_seconds: int = 0
+    is_running: bool = False
+    completed_at: Optional[datetime] = None
+    document_id: Optional[str] = None
+    document_name: Optional[str] = None
+    has_quiz: bool = False
+    question_count: int = 0
+
+class EmployeePlanDetailOut(BaseModel):
+    id: str
+    plan_id: str
+    plan_name: Optional[str]
+    description: Optional[str] = None
+    status: str
+    attempt_number: int
+    score: Optional[float] = None
+    pass_threshold: int = 70
+    duration_days: Optional[int] = None
+    time_spent_seconds: int = 0
+    total_steps: int = 0
+    completed_steps: int = 0
+    assigned_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    steps: List[EmployeeStepOut] = []
+
+class QuizOptionPublic(BaseModel):
+    id: str
+    text: str
+
+class QuizQuestionPublic(BaseModel):
+    id: str
+    text: str
+    qtype: str
+    options: List[QuizOptionPublic] = []
+
+class QuizPublicOut(BaseModel):
+    step_id: str
+    title: str
+    questions: List[QuizQuestionPublic] = []
+
+class QuizAnswerIn(BaseModel):
+    question_id: str
+    selected_option_ids: List[str] = []
+
+class QuizSubmit(BaseModel):
+    answers: List[QuizAnswerIn] = []
+
+class QuizResultOut(BaseModel):
+    score: float
+    passed: bool
+    threshold: int
+    correct_count: int
+    total: int
+    plan_status: str
+    reset: bool = False
+    new_plan_id: Optional[str] = None
 
 # ─── EMPLOYEE TASK ───────────────────────────────────────────────────────────
 
@@ -233,8 +421,12 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     sources: Optional[str]
+    tools_used: Optional[str] = None
     category: Optional[str]
     depth_level: Optional[str]
+    matched_category: Optional[str] = None
+    answer_confidence: Optional[float] = None
+    comprehension_score: Optional[float] = None
     created_at: Optional[datetime]
 
     class Config:

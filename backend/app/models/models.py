@@ -14,6 +14,15 @@ class Company(Base):
     slug = Column(String, unique=True, nullable=False)
     industry = Column(String)
     created_at = Column(DateTime, server_default=func.now())
+
+    # Configuración del agente IA (por empresa — multi-tenant)
+    openai_api_key = Column(Text, nullable=True)        # clave introducida desde la UI; tiene prioridad sobre la del .env
+    ai_model = Column(String, default="gpt-4o-mini")
+    ai_temperature = Column(Float, default=0.4)
+    agent_name = Column(String, default="Sara")
+    welcome_message = Column(Text, nullable=True)
+    rag_top_k = Column(Integer, default=5)
+
     departments = relationship("Department", back_populates="company")
     users = relationship("User", back_populates="company")
 
@@ -100,6 +109,9 @@ class Document(Base):
     require_rrhh = Column(Boolean, default=False)
     require_gerencia = Column(Boolean, default=False)
     min_seniority = Column(Integer, nullable=True)
+    # Categorización temática (para métricas de conocimiento, NO control de acceso)
+    primary_category = Column(String, nullable=True)       # categoría dominante del documento
+    target_role_ids = Column(Text, nullable=True)          # JSON: cargos a los que aplica el contenido ([] = todos)
 
 class OnboardingPlan(Base):
     __tablename__ = "onboarding_plans"
@@ -110,8 +122,11 @@ class OnboardingPlan(Base):
     target_role_id = Column(String, ForeignKey("roles.id"))
     target_department_id = Column(String, ForeignKey("departments.id"))
     duration_days = Column(Integer, default=15)
+    auto_assign = Column(Boolean, default=False)      # se asigna solo según el cargo objetivo
+    is_active = Column(Boolean, default=True)
+    pass_threshold = Column(Integer, default=70)      # nota mínima (0-100) para aprobar cuestionarios
     created_at = Column(DateTime, server_default=func.now())
-    tasks = relationship("OnboardingTask", back_populates="plan")
+    tasks = relationship("OnboardingTask", back_populates="plan", cascade="all, delete-orphan")
 
 class OnboardingTask(Base):
     __tablename__ = "onboarding_tasks"
@@ -120,24 +135,102 @@ class OnboardingTask(Base):
     title = Column(String, nullable=False)
     description = Column(String)
     day_number = Column(Integer, default=1)
+    # Tipo del paso: lectura | reunion | documento | cuestionario | tarea | configuracion | entregable
     category = Column(String, default="lectura")
-    estimated_minutes = Column(Integer, default=30)
+    order_index = Column(Integer, default=0)
+    estimated_minutes = Column(Integer, default=30)   # tiempo promedio digitado por RR.HH.
+    document_id = Column(String, ForeignKey("documents.id"), nullable=True)  # para pasos tipo documento
     plan = relationship("OnboardingPlan", back_populates="tasks")
+    questions = relationship("OnboardingQuestion", back_populates="task", cascade="all, delete-orphan")
+
+class OnboardingQuestion(Base):
+    """Pregunta cerrada de un paso tipo cuestionario."""
+    __tablename__ = "onboarding_questions"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    task_id = Column(String, ForeignKey("onboarding_tasks.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    qtype = Column(String, default="single")          # single (1 correcta) | multiple
+    category = Column(String, nullable=True)          # categoría de conocimiento (opcional, para la métrica)
+    order_index = Column(Integer, default=0)
+    task = relationship("OnboardingTask", back_populates="questions")
+    options = relationship("OnboardingQuestionOption", back_populates="question", cascade="all, delete-orphan")
+
+class OnboardingQuestionOption(Base):
+    __tablename__ = "onboarding_question_options"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    question_id = Column(String, ForeignKey("onboarding_questions.id"), nullable=False)
+    text = Column(String, nullable=False)
+    is_correct = Column(Boolean, default=False)
+    order_index = Column(Integer, default=0)
+    question = relationship("OnboardingQuestion", back_populates="options")
+
+class EmployeePlan(Base):
+    """Instancia de un plan asignada a un empleado (un intento).
+
+    Permite historial: cada reintento (p.ej. tras fallar un cuestionario) es una
+    fila nueva; las anteriores quedan como 'perdido'."""
+    __tablename__ = "employee_plans"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    plan_id = Column(String, ForeignKey("onboarding_plans.id"), nullable=False)
+    plan_name = Column(String)                         # snapshot del nombre del plan
+    status = Column(String, default="sin_empezar")     # sin_empezar | en_progreso | finalizado | perdido
+    attempt_number = Column(Integer, default=1)
+    score = Column(Float, nullable=True)               # nota global del plan (si tuvo cuestionarios)
+    pass_threshold = Column(Integer, default=70)       # snapshot del umbral del plan
+    time_spent_seconds = Column(Integer, default=0)
+    assigned_at = Column(DateTime, server_default=func.now())
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
 
 class EmployeeTask(Base):
     __tablename__ = "employee_tasks"
     id = Column(String, primary_key=True, default=gen_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    employee_plan_id = Column(String, ForeignKey("employee_plans.id"), nullable=True)
     plan_task_id = Column(String, ForeignKey("onboarding_tasks.id"))
     title = Column(String, nullable=False)
     description = Column(String)
-    category = Column(String)
-    status = Column(String, default="pendiente")
+    category = Column(String)                          # tipo del paso (igual que OnboardingTask.category)
+    status = Column(String, default="pendiente")       # pendiente | en_progreso | completada
     day_number = Column(Integer)
+    order_index = Column(Integer, default=0)
+    estimated_minutes = Column(Integer, default=0)     # snapshot del tiempo estimado
+    time_spent_seconds = Column(Integer, default=0)    # tiempo real acumulado
+    started_at = Column(DateTime, nullable=True)
+    last_resumed_at = Column(DateTime, nullable=True)  # marca de cuándo arrancó el cronómetro
     due_date = Column(String)
     completed_at = Column(DateTime, nullable=True)
     jira_issue_key = Column(String, nullable=True)
     jira_status = Column(String, nullable=True)
+    document_id = Column(String, nullable=True)        # snapshot del documento enlazado
+
+class QuizAttempt(Base):
+    """Intento de un cuestionario (paso) por un empleado. Guarda nota y aprobación."""
+    __tablename__ = "quiz_attempts"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    employee_plan_id = Column(String, ForeignKey("employee_plans.id"), nullable=False)
+    employee_task_id = Column(String, ForeignKey("employee_tasks.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    score = Column(Float, default=0)                   # 0-100
+    passed = Column(Boolean, default=False)
+    attempt_number = Column(Integer, default=1)
+    time_spent_seconds = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    answers = relationship("QuizAnswer", back_populates="attempt", cascade="all, delete-orphan")
+
+class QuizAnswer(Base):
+    """Respuesta del empleado a una pregunta dentro de un intento (historial completo)."""
+    __tablename__ = "quiz_answers"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    attempt_id = Column(String, ForeignKey("quiz_attempts.id"), nullable=False)
+    question_id = Column(String, nullable=True)        # id de la pregunta plantilla
+    question_text = Column(Text, nullable=True)        # snapshot
+    category = Column(String, nullable=True)           # categoría de conocimiento de la pregunta
+    selected_option_ids = Column(Text, nullable=True)  # JSON con los ids elegidos
+    is_correct = Column(Boolean, default=False)
+    attempt = relationship("QuizAttempt", back_populates="answers")
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -154,8 +247,13 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     sources = Column(Text, nullable=True)
-    category = Column(String, nullable=True)
+    tools_used = Column(Text, nullable=True)  # JSON string con los nombres de herramientas usadas
+    category = Column(String, nullable=True)         # categoría inferida de la PREGUNTA
     depth_level = Column(String, nullable=True)
+    # Métricas de conocimiento (persistidas por intercambio para la serie temporal)
+    matched_category = Column(String, nullable=True)     # categoría REAL de los chunks recuperados
+    answer_confidence = Column(Float, nullable=True)     # mejor similitud del RAG (0..1)
+    comprehension_score = Column(Float, nullable=True)   # qué tan resuelto quedó el intercambio (0..1)
     created_at = Column(DateTime, server_default=func.now())
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -266,6 +364,16 @@ class UserChangeLog(Base):
     new_value = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
+class RRHHAlert(Base):
+    """Alerta generada por el agente para que RR.HH. acompañe a un empleado."""
+    __tablename__ = "rrhh_alerts"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    company_id = Column(String, ForeignKey("companies.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    motivo = Column(Text, nullable=False)
+    status = Column(String, default="pendiente")  # pendiente | atendida
+    created_at = Column(DateTime, server_default=func.now())
+
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     id = Column(String, primary_key=True, default=gen_uuid)
@@ -274,4 +382,9 @@ class DocumentChunk(Base):
     content = Column(Text, nullable=False)
     chunk_index = Column(Integer, default=0)
     embedding = Column(Text, nullable=True)  # JSON string del vector
+    # Categorización temática del fragmento (para clasificar preguntas y medir conocimiento)
+    category = Column(String, nullable=True)         # una de las 5 categorías fijas
+    topic = Column(String, nullable=True)            # tema fino extraído del contenido
+    complexity = Column(String, nullable=True)       # basico | intermedio | avanzado
+    cargo_ids = Column(Text, nullable=True)          # JSON: cargos relevantes ([] = todos)
     created_at = Column(DateTime, server_default=func.now())

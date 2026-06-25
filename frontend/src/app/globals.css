@@ -1,20 +1,25 @@
 @import "tailwindcss";
 
-/* Campo de formulario reutilizable (usado en modales de nómina) */
-.input {
-  width: 100%;
-  background-color: #0f1117;
-  border: 1px solid #2a3349;
-  color: #ffffff;
-  border-radius: 0.75rem;
-  padding: 0.625rem 0.75rem;
-  font-size: 0.875rem;
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-.input::placeholder {
-  color: #475569;
-}
-.input:focus {
-  border-color: #6366f1;
+/* Campo de formulario reutilizable (usado en modales de nómina).
+   Va en @layer components para quedar POR ENCIMA del Preflight de Tailwind 4,
+   que resetea `border: 0 solid` en todos los elementos. Sin esto, el borde del
+   input se pierde. */
+@layer components {
+  .input {
+    width: 100%;
+    background-color: #0f1117;
+    border: 1px solid #2a3349;
+    color: #ffffff;
+    border-radius: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .input::placeholder {
+    color: #475569;
+  }
+  .input:focus {
+    border-color: #6366f1;
+  }
 }

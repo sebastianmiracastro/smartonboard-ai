@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,10 +93,19 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <button type="button" className="text-indigo-400 text-sm hover:text-indigo-300 transition-colors">
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => setForgot(true)}
+                className="text-indigo-400 text-sm hover:text-indigo-300 transition-colors"
+              >
                 ¿Olvidaste tu contraseña?
               </button>
+              {forgot && (
+                <p className="text-slate-400 text-xs text-right">
+                  Contáctate con una persona de RR.HH. para restablecerla.
+                </p>
+              )}
             </div>
 
             <button

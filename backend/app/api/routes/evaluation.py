@@ -1,12 +1,24 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+import json
 from app.db.database import get_db
-from app.models.models import User, Conversation, ChatMessage
+from app.models.models import User, Conversation, ChatMessage, RRHHAlert
 from app.core.dependencies import get_current_user, require_rrhh
-from app.services.evaluation import evaluate_response, generate_user_insights
+from app.services.evaluation import (
+    evaluate_response, generate_user_insights,
+    compute_knowledge_metrics, company_knowledge_map, compute_onboarding_metrics,
+)
 
 router = APIRouter(prefix="/api/evaluation", tags=["Evaluación"])
+
+# Etiquetas legibles para las herramientas del agente
+TOOL_LABELS = {
+    "buscar_en_documentos": "Búsqueda en documentos",
+    "consultar_mis_tareas": "Consulta de tareas",
+    "completar_tarea": "Completar tarea",
+    "escalar_a_rrhh": "Escalado a RR.HH.",
+}
 
 @router.get("/insights/{user_id}")
 def get_user_insights(
@@ -16,6 +28,48 @@ def get_user_insights(
 ):
     insights = generate_user_insights(db, user_id, current_user.company_id)
     return {"user_id": user_id, "insights": insights}
+
+@router.get("/knowledge/{user_id}")
+def get_user_knowledge(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    """Cobertura, comprensión por categoría y señales de pérdida de conocimiento."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.company_id == current_user.company_id,
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return compute_knowledge_metrics(db, user)
+
+
+@router.get("/company/knowledge-map")
+def get_company_knowledge_map(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    """Matriz cargo × categoría con la comprensión media (heatmap para RR.HH.)."""
+    return company_knowledge_map(db, current_user.company_id)
+
+
+@router.get("/onboarding/{user_id}")
+def get_user_onboarding(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    """Métricas del onboarding del empleado: avance, tiempo real vs estimado,
+    notas e intentos de cuestionarios."""
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.company_id == current_user.company_id,
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return compute_onboarding_metrics(db, user)
+
 
 @router.get("/stats/{user_id}")
 def get_user_stats(
@@ -87,3 +141,106 @@ def get_company_summary(
         "ai_resolution_rate": 0.94,
         "avg_onboarding_days": 4.2,
     }
+
+
+@router.get("/company/analytics")
+def get_company_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    """Distribuciones agregadas (por toda la empresa) para alimentar las gráficas
+    del dashboard: preguntas por categoría, por profundidad y uso de herramientas
+    del agente."""
+    company_id = current_user.company_id
+
+    user_messages = db.query(ChatMessage).join(Conversation).join(User).filter(
+        User.company_id == company_id,
+        ChatMessage.role == "user",
+    ).all()
+
+    assistant_messages = db.query(ChatMessage).join(Conversation).join(User).filter(
+        User.company_id == company_id,
+        ChatMessage.role == "assistant",
+    ).all()
+
+    category_counts: dict = {}
+    depth_counts: dict = {}
+    for m in user_messages:
+        cat = m.category or "sin_categoria"
+        dep = m.depth_level or "basico"
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+        depth_counts[dep] = depth_counts.get(dep, 0) + 1
+
+    # Uso de herramientas del agente (leer tools_used de los mensajes del asistente)
+    tool_counts: dict = {}
+    for m in assistant_messages:
+        if not m.tools_used:
+            continue
+        try:
+            for t in json.loads(m.tools_used):
+                tool_counts[t] = tool_counts.get(t, 0) + 1
+        except (ValueError, TypeError):
+            continue
+
+    def to_series(counts: dict) -> List[dict]:
+        return [{"name": k, "value": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])]
+
+    return {
+        "categories": to_series(category_counts),
+        "depths": to_series(depth_counts),
+        "tools": [
+            {"name": TOOL_LABELS.get(k, k), "key": k, "value": v}
+            for k, v in sorted(tool_counts.items(), key=lambda x: -x[1])
+        ],
+        "total_questions": len(user_messages),
+    }
+
+
+@router.get("/alerts")
+def list_alerts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    """Alertas generadas por el agente para que RR.HH. acompañe a empleados.
+    Las pendientes primero, con el nombre del empleado resuelto."""
+    alerts = db.query(RRHHAlert).filter(
+        RRHHAlert.company_id == current_user.company_id
+    ).order_by(RRHHAlert.created_at.desc()).all()
+
+    user_ids = {a.user_id for a in alerts}
+    names = {}
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        names = {u.id: u.full_name for u in users}
+
+    data = [
+        {
+            "id": a.id,
+            "user_id": a.user_id,
+            "user_name": names.get(a.user_id, a.user_id),
+            "motivo": a.motivo,
+            "status": a.status,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in alerts
+    ]
+    # pendientes primero
+    data.sort(key=lambda x: 0 if x["status"] == "pendiente" else 1)
+    return {"alerts": data, "pending_count": sum(1 for a in data if a["status"] == "pendiente")}
+
+
+@router.patch("/alerts/{alert_id}/resolve")
+def resolve_alert(
+    alert_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh)
+):
+    alert = db.query(RRHHAlert).filter(
+        RRHHAlert.id == alert_id,
+        RRHHAlert.company_id == current_user.company_id,
+    ).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alerta no encontrada")
+    alert.status = "atendida"
+    db.commit()
+    return {"ok": True, "status": alert.status}
