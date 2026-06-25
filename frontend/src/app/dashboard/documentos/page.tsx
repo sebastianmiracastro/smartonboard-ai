@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { FileText, Upload, Trash2, Shield, Users, Crown, Briefcase, Building2, X, Tag } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 const statusConfig: Record<string, { label: string; classes: string }> = {
   indexado: { label: "Indexado", classes: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
@@ -37,6 +38,7 @@ function fmtDate(s?: string) {
 }
 
 export default function DocumentosPage() {
+  const toast = useToast();
   const [docs, setDocs] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -75,20 +77,21 @@ export default function DocumentosPage() {
   };
 
   const deleteDoc = async (id: string) => {
-    try { await api.deleteDocument(id); setDocs(docs.filter((d) => d.id !== id)); }
-    catch (e) { console.error(e); }
+    try { await api.deleteDocument(id); setDocs(docs.filter((d) => d.id !== id)); toast.success("Documento eliminado"); }
+    catch (e: any) { toast.error(e.message || "No se pudo eliminar el documento"); }
   };
 
   // Selección de archivo (por botón o arrastre) → abre el modal de parámetros
   const pickFile = (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!["pdf", "docx", "txt"].includes(ext || "")) { setError(""); alert("Formato no soportado. Usa PDF, DOCX o TXT."); return; }
+    if (!["pdf", "docx", "txt"].includes(ext || "")) { toast.error("Formato no soportado. Usa PDF, DOCX o TXT."); return; }
     setForm({ ...emptyForm }); setError(""); setPendingFile(file);
   };
 
   const doUpload = async () => {
     if (!pendingFile) return;
     setError(""); setUploading(true);
+    const tid = toast.loading(`Subiendo “${pendingFile.name}”…`);
     try {
       const params = {
         category: form.category,
@@ -108,19 +111,29 @@ export default function DocumentosPage() {
         primary_category: form.category || null,
       }]);
       setPendingFile(null);
-      pollDocumentStatus(data.id);
-    } catch (e: any) { setError(e.message || "No se pudo subir el documento."); }
+      toast.update(tid, { type: "info", message: "Procesando y extrayendo contextos…" });
+      pollDocumentStatus(data.id, tid);
+    } catch (e: any) {
+      setError(e.message || "No se pudo subir el documento.");
+      toast.update(tid, { type: "error", message: e.message || "No se pudo subir el documento" });
+    }
     finally { setUploading(false); }
   };
 
-  const pollDocumentStatus = (docId: string) => {
+  const pollDocumentStatus = (docId: string, tid: number) => {
     const interval = setInterval(async () => {
       try {
         const data = await api.getDocuments();
         const doc = data.find((d: any) => d.id === docId);
         if (doc) {
           setDocs((prev) => prev.map((d) => d.id === docId ? { ...d, ...doc } : d));
-          if (doc.status === "indexado" || doc.status === "error") clearInterval(interval);
+          if (doc.status === "indexado") {
+            toast.update(tid, { type: "success", message: `“${doc.name}” indexado y listo` });
+            clearInterval(interval);
+          } else if (doc.status === "error") {
+            toast.update(tid, { type: "error", message: `Error al procesar “${doc.name}”` });
+            clearInterval(interval);
+          }
         }
       } catch { clearInterval(interval); }
     }, 2000);
@@ -152,7 +165,7 @@ export default function DocumentosPage() {
           { label: "Contextos indexados", value: totalChunks.toLocaleString() },
           { label: "Indexados", value: docs.filter((d) => d.status === "indexado").length },
         ].map((s) => (
-          <div key={s.label} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-4 text-center">
+          <div key={s.label} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-4 text-center">
             <p className="text-white text-2xl font-semibold">{s.value}</p>
             <p className="text-slate-500 text-xs mt-1">{s.label}</p>
           </div>
@@ -164,7 +177,7 @@ export default function DocumentosPage() {
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) pickFile(f); }}
-        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${dragging ? "border-indigo-500 bg-indigo-500/5" : "border-[#2a3349] hover:border-[#3d4f6e]"}`}
+        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${dragging ? "border-indigo-500 bg-indigo-500/5" : "border-[#2a3354] hover:border-[#3a4a72]"}`}
       >
         <Upload size={24} className="text-slate-500 mx-auto mb-3" />
         <p className="text-slate-300 text-sm font-medium mb-1">Arrastra un archivo aquí o usa “Subir documento”</p>
@@ -172,17 +185,17 @@ export default function DocumentosPage() {
       </div>
 
       {/* Lista */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#2a3349]"><h2 className="text-white font-semibold">Documentos cargados</h2></div>
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#2a3354]"><h2 className="text-white font-semibold">Documentos cargados</h2></div>
         {docs.length === 0 ? (
           <div className="px-6 py-12 text-center text-slate-500 text-sm">Aún no hay documentos.</div>
         ) : (
-          <div className="divide-y divide-[#2a3349]">
+          <div className="divide-y divide-[#2a3354]">
             {docs.map((doc) => {
               const acc = accessBadge(doc);
               const AccIcon = acc.icon;
               return (
-                <div key={doc.id} className="px-6 py-4 flex items-center gap-4 hover:bg-[#1e2536]/50 transition-colors">
+                <div key={doc.id} className="px-6 py-4 flex items-center gap-4 hover:bg-[#1c2540]/50 transition-colors">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${doc.format === "pdf" ? "bg-red-500/10" : doc.format === "docx" ? "bg-blue-500/10" : "bg-slate-500/10"}`}>
                     <FileText size={18} className={doc.format === "pdf" ? "text-red-400" : doc.format === "docx" ? "text-blue-400" : "text-slate-400"} />
                   </div>
@@ -200,7 +213,7 @@ export default function DocumentosPage() {
                     </div>
                     {doc.status === "procesando" && doc.progress ? (
                       <div className="mt-2 flex items-center gap-2">
-                        <div className="flex-1 h-1 bg-[#2a3349] rounded-full overflow-hidden">
+                        <div className="flex-1 h-1 bg-[#2a3354] rounded-full overflow-hidden">
                           <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${doc.progress}%` }} />
                         </div>
                         <span className="text-amber-400 text-xs">{doc.progress}%</span>
@@ -226,14 +239,14 @@ export default function DocumentosPage() {
       {/* Modal de parámetros de subida */}
       {pendingFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !uploading && setPendingFile(null)}>
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
               <h2 className="text-white text-lg font-semibold">Subir documento</h2>
               <button onClick={() => !uploading && setPendingFile(null)} className="text-slate-500 hover:text-slate-200"><X size={18} /></button>
             </div>
             <div className="px-6 py-5 flex flex-col gap-4">
               {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg px-3 py-2">{error}</div>}
-              <div className="flex items-center gap-2 bg-[#0f1117] border border-[#2a3349] rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-2 bg-[#0f1629] border border-[#2a3354] rounded-xl px-3 py-2.5">
                 <FileText size={16} className="text-indigo-400 shrink-0" />
                 <span className="text-slate-300 text-sm truncate">{pendingFile.name}</span>
                 <span className="text-slate-600 text-xs ml-auto shrink-0">{fmtSize(Math.round(pendingFile.size / 1024))}</span>
@@ -286,7 +299,7 @@ export default function DocumentosPage() {
                 </label>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354]">
               <button onClick={() => setPendingFile(null)} disabled={uploading} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl disabled:opacity-40">Cancelar</button>
               <button onClick={doUpload} disabled={uploading} className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
                 {uploading ? "Subiendo..." : "Subir e indexar"}

@@ -24,11 +24,11 @@ const DEPTH_LABELS: Record<string, string> = {
   avanzado: "Avanzado",
 };
 
-const CATEGORY_COLORS = ["#6366f1", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#64748b"];
+const CATEGORY_COLORS = ["#6d5cff", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#64748b"];
 
 // Color de celda del heatmap por índice de comprensión (buckets consistentes con la app)
 function heatColor(v: number | null): string {
-  if (v == null) return "bg-[#1e2536] text-slate-600 border-[#2a3349]";
+  if (v == null) return "bg-[#1c2540] text-slate-600 border-[#2a3354]";
   if (v < 0.4) return "bg-red-500/15 text-red-300 border-red-500/25";
   if (v < 0.6) return "bg-amber-500/15 text-amber-300 border-amber-500/25";
   return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
@@ -36,7 +36,7 @@ function heatColor(v: number | null): string {
 const DEPTH_COLORS: Record<string, string> = {
   basico: "#10b981",
   intermedio: "#f59e0b",
-  avanzado: "#6366f1",
+  avanzado: "#6d5cff",
 };
 
 export default function DashboardPage() {
@@ -134,7 +134,7 @@ export default function DashboardPage() {
     },
     {
       label: "Resolución IA",
-      value: summary ? `${Math.round(summary.ai_resolution_rate * 100)}%` : "—",
+      value: summary && summary.ai_resolution_rate != null ? `${Math.round(summary.ai_resolution_rate * 100)}%` : "—",
       sub: "sin intervención humana",
       subColor: "text-emerald-400",
       icon: Bot,
@@ -143,7 +143,7 @@ export default function DashboardPage() {
     },
     {
       label: "Tiempo promedio",
-      value: summary ? `${summary.avg_onboarding_days}d` : "—",
+      value: summary && summary.avg_onboarding_days != null ? `${summary.avg_onboarding_days}d` : "—",
       sub: "días de onboarding",
       subColor: "text-emerald-400",
       icon: TrendingDown,
@@ -172,7 +172,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {metrics.map((m) => (
-          <div key={m.label} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+          <div key={m.label} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
             <div className="flex items-start justify-between mb-4">
               <p className="text-slate-400 text-xs uppercase tracking-wider">{m.label}</p>
               <div className={`w-8 h-8 ${m.iconBg} rounded-lg flex items-center justify-center`}>
@@ -216,7 +216,7 @@ export default function DashboardPage() {
 
       {/* Analítica de las preguntas al agente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <h2 className="text-white font-semibold mb-1">Preguntas por categoría</h2>
           <p className="text-slate-500 text-xs mb-4">Temas que más consultan los empleados al agente</p>
           {hasChatData && categoryData.length > 0 ? (
@@ -225,8 +225,8 @@ export default function DashboardPage() {
                 <XAxis type="number" stroke="#475569" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="label" stroke="#94a3b8" fontSize={11} width={84} />
                 <Tooltip
-                  cursor={{ fill: "#1e2536" }}
-                  contentStyle={{ background: "#0f1320", border: "1px solid #2a3349", borderRadius: 12, fontSize: 12 }}
+                  cursor={{ fill: "#1c2540" }}
+                  contentStyle={{ background: "#0f1320", border: "1px solid #2a3354", borderRadius: 12, fontSize: 12 }}
                   labelStyle={{ color: "#e2e8f0" }}
                 />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} name="Preguntas">
@@ -243,7 +243,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <h2 className="text-white font-semibold mb-1">Profundidad de las preguntas</h2>
           <p className="text-slate-500 text-xs mb-4">Nivel de las consultas realizadas</p>
           {hasChatData && depthData.length > 0 ? (
@@ -257,7 +257,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: "#0f1320", border: "1px solid #2a3349", borderRadius: 12, fontSize: 12 }}
+                    contentStyle={{ background: "#0f1320", border: "1px solid #2a3354", borderRadius: 12, fontSize: 12 }}
                     labelStyle={{ color: "#e2e8f0" }}
                   />
                 </PieChart>
@@ -282,7 +282,7 @@ export default function DashboardPage() {
 
       {/* Mapa de conocimiento por cargo (heatmap cargo × categoría) */}
       {hasKnowledgeMap && (
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-1">
             <Brain size={16} className="text-indigo-400" />
             <h2 className="text-white font-semibold">Mapa de conocimiento por cargo</h2>
@@ -334,21 +334,21 @@ export default function DashboardPage() {
             <span className="flex items-center gap-1.5 text-xs text-slate-400"><span className="w-3 h-3 rounded-sm bg-red-500/30 border border-red-500/30" />Bajo</span>
             <span className="flex items-center gap-1.5 text-xs text-slate-400"><span className="w-3 h-3 rounded-sm bg-amber-500/30 border border-amber-500/30" />Medio</span>
             <span className="flex items-center gap-1.5 text-xs text-slate-400"><span className="w-3 h-3 rounded-sm bg-emerald-500/30 border border-emerald-500/30" />Alto</span>
-            <span className="flex items-center gap-1.5 text-xs text-slate-400"><span className="w-3 h-3 rounded-sm bg-[#1e2536] border border-[#2a3349]" />Sin datos</span>
+            <span className="flex items-center gap-1.5 text-xs text-slate-400"><span className="w-3 h-3 rounded-sm bg-[#1c2540] border border-[#2a3354]" />Sin datos</span>
           </div>
         </div>
       )}
 
       {/* Acciones del agente (herramientas usadas) */}
       {toolData.length > 0 && (
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Wrench size={16} className="text-indigo-400" />
             <h2 className="text-white font-semibold">Acciones del agente</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {toolData.map((t: any) => (
-              <div key={t.key} className="bg-[#1e2536]/50 border border-[#2a3349] rounded-xl p-3">
+              <div key={t.key} className="bg-[#1c2540]/50 border border-[#2a3354] rounded-xl p-3">
                 <p className="text-white text-2xl font-semibold">{t.value}</p>
                 <p className="text-slate-400 text-xs mt-0.5">{t.name}</p>
               </div>
@@ -357,8 +357,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
           <div>
             <h2 className="text-white font-semibold">Empleados en onboarding</h2>
             <p className="text-slate-500 text-xs mt-0.5">Datos en tiempo real</p>
@@ -371,7 +371,7 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3349] bg-[#1e2536]/50">
+        <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3354] bg-[#1c2540]/50">
           <span className="col-span-4 text-slate-500 text-xs uppercase tracking-wider">Empleado</span>
           <span className="col-span-3 text-slate-500 text-xs uppercase tracking-wider">Rol</span>
           <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Estado</span>
@@ -387,7 +387,7 @@ export default function DashboardPage() {
           onboarding.map((emp) => (
             <div
               key={emp.id}
-              className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3349] last:border-0 hover:bg-[#1e2536]/50 transition-colors items-center"
+              className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3354] last:border-0 hover:bg-[#1c2540]/50 transition-colors items-center"
             >
               <div className="col-span-4 flex items-center gap-3">
                 <div className="w-8 h-8 bg-indigo-500/20 border border-indigo-500/20 rounded-full flex items-center justify-center shrink-0">
@@ -456,7 +456,7 @@ export default function DashboardPage() {
             bg: "bg-emerald-500/10"
           },
         ].map((s) => (
-          <div key={s.label} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-4 flex items-center gap-4">
+          <div key={s.label} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-4 flex items-center gap-4">
             <div className={`w-10 h-10 ${s.bg} rounded-xl flex items-center justify-center shrink-0`}>
               <s.icon size={18} className={s.color} />
             </div>

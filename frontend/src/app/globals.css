@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* Acento de marca: índigo-violeta más vivo (re-tema). Sobrescribe las clases
+   indigo-* de Tailwind v4 en toda la app sin tocar archivo por archivo. */
+@theme {
+  --color-indigo-300: #a39bff;
+  --color-indigo-400: #8b87ff;
+  --color-indigo-500: #6d5cff;
+  --color-indigo-600: #5b4be6;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* Campo de formulario reutilizable (usado en modales de nómina).
    Va en @layer components para quedar POR ENCIMA del Preflight de Tailwind 4,
    que resetea `border: 0 solid` en todos los elementos. Sin esto, el borde del
@@ -7,8 +21,8 @@
 @layer components {
   .input {
     width: 100%;
-    background-color: #0f1117;
-    border: 1px solid #2a3349;
+    background-color: #0f1629;
+    border: 1px solid #2a3354;
     color: #ffffff;
     border-radius: 0.75rem;
     padding: 0.625rem 0.75rem;
@@ -20,6 +34,6 @@
     color: #475569;
   }
   .input:focus {
-    border-color: #6366f1;
+    border-color: #6d5cff;
   }
 }

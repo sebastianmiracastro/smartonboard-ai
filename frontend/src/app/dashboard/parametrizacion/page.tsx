@@ -6,8 +6,9 @@ import {
   X, Trash2, Users, Lock, AlertTriangle,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
-const COLORS = ["#6366f1", "#ec4899", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#ef4444"];
+const COLORS = ["#6d5cff", "#ec4899", "#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#ef4444"];
 const SENIORITY = [
   { level: 1, label: "Junior" },
   { level: 2, label: "Mid" },
@@ -23,12 +24,13 @@ const categoryColors: Record<string, string> = {
   relaciones: "bg-pink-500/10 text-pink-400 border border-pink-500/20",
 };
 
-const emptyDept = { name: "", description: "", color: "#6366f1", is_rrhh: false, is_gerencia: false };
+const emptyDept = { name: "", description: "", color: "#6d5cff", is_rrhh: false, is_gerencia: false };
 const emptyRole = { name: "", department_id: "", description: "", seniority_level: 1, seniority_label: "Junior" };
 
 type Tab = "departamentos" | "cargos" | "categorias";
 
 export default function ParametrizacionPage() {
+  const toast = useToast();
   const [tab, setTab] = useState<Tab>("departamentos");
 
   const [departments, setDepartments] = useState<any[]>([]);
@@ -97,10 +99,12 @@ export default function ParametrizacionPage() {
     setSaving(true);
     try {
       await api.createDepartment(deptForm);
+      toast.success("Departamento creado");
       setShowDeptModal(false);
       await loadAll();
     } catch (err: any) {
       setFormError(err.message || "No se pudo crear el departamento.");
+      toast.error(err.message || "No se pudo crear el departamento");
     } finally {
       setSaving(false);
     }
@@ -129,10 +133,12 @@ export default function ParametrizacionPage() {
     setSaving(true);
     try {
       await api.createRole(roleForm);
+      toast.success("Cargo creado");
       setShowRoleModal(false);
       await loadAll();
     } catch (err: any) {
       setFormError(err.message || "No se pudo crear el cargo.");
+      toast.error(err.message || "No se pudo crear el cargo");
     } finally {
       setSaving(false);
     }
@@ -150,6 +156,7 @@ export default function ParametrizacionPage() {
     try {
       if (deleteTarget.kind === "dept") await api.deleteDepartment(deleteTarget.id);
       else await api.deleteRole(deleteTarget.id);
+      toast.success(deleteTarget.kind === "dept" ? "Departamento eliminado" : "Cargo eliminado");
       setDeleteTarget(null);
       await loadAll();
     } catch (err: any) {
@@ -195,7 +202,7 @@ export default function ParametrizacionPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#161b27] border border-[#2a3349] rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-[#161e33] border border-[#2a3354] rounded-xl p-1 w-fit">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -212,7 +219,7 @@ export default function ParametrizacionPage() {
       {tab === "departamentos" && (
         <div className="flex flex-col gap-3">
           {departments.length === 0 ? (
-            <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-10 text-center">
+            <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-10 text-center">
               <Building2 size={28} className="text-slate-600 mx-auto mb-2" />
               <p className="text-slate-400 text-sm">Aún no hay departamentos. Crea el primero.</p>
             </div>
@@ -220,13 +227,13 @@ export default function ParametrizacionPage() {
             departments.map((dept) => {
               const deptRoles = rolesByDept(dept.id);
               return (
-                <div key={dept.id} className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
+                <div key={dept.id} className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
                   <div className="flex items-center gap-4 px-6 py-4">
                     <div
                       className="flex items-center gap-4 flex-1 cursor-pointer"
                       onClick={() => setExpanded(expanded === dept.id ? null : dept.id)}
                     >
-                      <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: dept.color || "#6366f1" }} />
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: dept.color || "#6d5cff" }} />
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-white font-medium">{dept.name}</p>
@@ -264,7 +271,7 @@ export default function ParametrizacionPage() {
                   </div>
 
                   {expanded === dept.id && (
-                    <div className="border-t border-[#2a3349] px-6 py-4 bg-[#1e2536]/30">
+                    <div className="border-t border-[#2a3354] px-6 py-4 bg-[#1c2540]/30">
                       <p className="text-slate-400 text-xs uppercase tracking-wider mb-3">
                         Cargos del departamento
                       </p>
@@ -273,7 +280,7 @@ export default function ParametrizacionPage() {
                       ) : (
                         <div className="flex flex-col gap-2">
                           {deptRoles.map((r) => (
-                            <div key={r.id} className="flex items-center gap-3 bg-[#161b27] border border-[#2a3349] rounded-xl px-3 py-2">
+                            <div key={r.id} className="flex items-center gap-3 bg-[#161e33] border border-[#2a3354] rounded-xl px-3 py-2">
                               <Briefcase size={14} className="text-indigo-400 shrink-0" />
                               <span className="text-white text-sm flex-1">{r.name}</span>
                               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20">
@@ -297,7 +304,7 @@ export default function ParametrizacionPage() {
 
       {/* ─── TAB CARGOS ────────────────────────────────────────────────────── */}
       {tab === "cargos" && (
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
           {roles.length === 0 ? (
             <div className="p-10 text-center">
               <Briefcase size={28} className="text-slate-600 mx-auto mb-2" />
@@ -305,7 +312,7 @@ export default function ParametrizacionPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3349] bg-[#1e2536]/50">
+              <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3354] bg-[#1c2540]/50">
                 <span className="col-span-4 text-slate-500 text-xs uppercase tracking-wider">Cargo</span>
                 <span className="col-span-3 text-slate-500 text-xs uppercase tracking-wider">Departamento</span>
                 <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Seniority</span>
@@ -313,7 +320,7 @@ export default function ParametrizacionPage() {
                 <span className="col-span-1"></span>
               </div>
               {roles.map((r) => (
-                <div key={r.id} className="grid grid-cols-12 gap-4 px-6 py-3.5 border-b border-[#2a3349] last:border-0 items-center hover:bg-[#1e2536]/40 transition-colors">
+                <div key={r.id} className="grid grid-cols-12 gap-4 px-6 py-3.5 border-b border-[#2a3354] last:border-0 items-center hover:bg-[#1c2540]/40 transition-colors">
                   <div className="col-span-4 min-w-0">
                     <p className="text-white text-sm font-medium truncate">{r.name}</p>
                     {r.description && <p className="text-slate-500 text-xs truncate">{r.description}</p>}
@@ -356,7 +363,7 @@ export default function ParametrizacionPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {categories.map((c) => (
-              <div key={c.key} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-4">
+              <div key={c.key} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-4">
                 <span className={`text-xs px-2 py-0.5 rounded-full ${categoryColors[c.key] || "bg-slate-500/10 text-slate-400 border border-slate-500/20"}`}>
                   {c.label}
                 </span>
@@ -370,8 +377,8 @@ export default function ParametrizacionPage() {
       {/* ─── MODAL: nuevo departamento ─────────────────────────────────────── */}
       {showDeptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !saving && setShowDeptModal(false)}>
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
               <h2 className="text-white text-lg font-semibold">Nuevo departamento</h2>
               <button onClick={() => !saving && setShowDeptModal(false)} className="text-slate-500 hover:text-slate-200 transition-colors"><X size={18} /></button>
             </div>
@@ -380,19 +387,19 @@ export default function ParametrizacionPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-slate-400 text-xs">Nombre *</label>
                 <input value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} placeholder="Ej. Tecnología"
-                  className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
+                  className="bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-slate-400 text-xs">Descripción</label>
                 <input value={deptForm.description} onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} placeholder="Breve descripción del área"
-                  className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
+                  className="bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-slate-400 text-xs">Color</label>
                 <div className="flex gap-2">
                   {COLORS.map((c) => (
                     <button key={c} onClick={() => setDeptForm({ ...deptForm, color: c })}
-                      className={`w-7 h-7 rounded-full transition-transform ${deptForm.color === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#161b27] scale-110" : ""}`}
+                      className={`w-7 h-7 rounded-full transition-transform ${deptForm.color === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#161e33] scale-110" : ""}`}
                       style={{ backgroundColor: c }} />
                   ))}
                 </div>
@@ -408,7 +415,7 @@ export default function ParametrizacionPage() {
                 </label>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354]">
               <button onClick={() => setShowDeptModal(false)} disabled={saving} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl transition-colors disabled:opacity-40">Cancelar</button>
               <button onClick={createDept} disabled={saving} className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
                 {saving ? "Creando..." : "Crear departamento"}
@@ -421,8 +428,8 @@ export default function ParametrizacionPage() {
       {/* ─── MODAL: nuevo cargo ────────────────────────────────────────────── */}
       {showRoleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !saving && setShowRoleModal(false)}>
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
               <h2 className="text-white text-lg font-semibold">Nuevo cargo</h2>
               <button onClick={() => !saving && setShowRoleModal(false)} className="text-slate-500 hover:text-slate-200 transition-colors"><X size={18} /></button>
             </div>
@@ -431,12 +438,12 @@ export default function ParametrizacionPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-slate-400 text-xs">Nombre *</label>
                 <input value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} placeholder="Ej. Desarrollador Backend"
-                  className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
+                  className="bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-slate-400 text-xs">Departamento *</label>
                 <select value={roleForm.department_id} onChange={(e) => setRoleForm({ ...roleForm, department_id: e.target.value })}
-                  className="bg-[#0f1117] border border-[#2a3349] text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
+                  className="bg-[#0f1629] border border-[#2a3354] text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
                   {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
@@ -448,23 +455,23 @@ export default function ParametrizacionPage() {
                       const lvl = parseInt(e.target.value);
                       setRoleForm({ ...roleForm, seniority_level: lvl, seniority_label: SENIORITY.find((s) => s.level === lvl)?.label || roleForm.seniority_label });
                     }}
-                    className="bg-[#0f1117] border border-[#2a3349] text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
+                    className="bg-[#0f1629] border border-[#2a3354] text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors">
                     {SENIORITY.map((s) => <option key={s.level} value={s.level}>{s.level} · {s.label}</option>)}
                   </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-slate-400 text-xs">Etiqueta</label>
                   <input value={roleForm.seniority_label} onChange={(e) => setRoleForm({ ...roleForm, seniority_label: e.target.value })} placeholder="Ej. Director"
-                    className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
+                    className="bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-slate-400 text-xs">Descripción</label>
                 <input value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} placeholder="Responsabilidades del cargo"
-                  className="bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
+                  className="bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors" />
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354]">
               <button onClick={() => setShowRoleModal(false)} disabled={saving} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl transition-colors disabled:opacity-40">Cancelar</button>
               <button onClick={createRole} disabled={saving} className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
                 {saving ? "Creando..." : "Crear cargo"}
@@ -477,7 +484,7 @@ export default function ParametrizacionPage() {
       {/* ─── MODAL: confirmar borrado ──────────────────────────────────────── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 flex flex-col gap-4">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center shrink-0">
@@ -494,7 +501,7 @@ export default function ParametrizacionPage() {
               </div>
               {deleteError && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-lg px-3 py-2">{deleteError}</div>}
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354]">
               <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl transition-colors disabled:opacity-40">Cancelar</button>
               <button onClick={confirmDelete} disabled={deleting} className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
                 {deleting ? "Eliminando..." : "Eliminar"}

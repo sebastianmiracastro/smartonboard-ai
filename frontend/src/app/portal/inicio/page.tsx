@@ -70,12 +70,12 @@ export default function PortalInicioPage() {
       ) : null}
 
       {/* Progreso */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-white font-medium">Tu progreso</p>
           <span className="text-indigo-400 text-sm font-semibold">{progress}%</span>
         </div>
-        <div className="h-2 bg-[#2a3349] rounded-full overflow-hidden">
+        <div className="h-2 bg-[#2a3354] rounded-full overflow-hidden">
           <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
         </div>
         <div className="flex justify-between mt-2">
@@ -91,7 +91,7 @@ export default function PortalInicioPage() {
           { icon: CheckSquare, label: "Ver mi plan", sub: `${Math.max(0, totalSteps - completedSteps)} pasos pendientes`, href: "/portal/tareas", color: "text-amber-400", bg: "bg-amber-500/10" },
           { icon: BookOpen, label: "Recursos", sub: "Documentos de la empresa", href: "/portal/recursos", color: "text-emerald-400", bg: "bg-emerald-500/10" },
         ].map((item) => (
-          <button key={item.href} onClick={() => router.push(item.href)} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5 text-left hover:border-[#3d4f6e] transition-colors">
+          <button key={item.href} onClick={() => router.push(item.href)} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5 text-left hover:border-[#3a4a72] transition-colors">
             <div className={`w-10 h-10 ${item.bg} rounded-xl flex items-center justify-center mb-3`}><item.icon size={20} className={item.color} /></div>
             <p className="text-white text-sm font-medium">{item.label}</p>
             <p className="text-slate-500 text-xs mt-0.5">{item.sub}</p>
@@ -100,15 +100,15 @@ export default function PortalInicioPage() {
       </div>
 
       {/* Pasos del plan */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
           <h2 className="text-white font-semibold">{focus ? focus.plan_name : "Mi plan"}</h2>
           <button onClick={() => router.push("/portal/tareas")} className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-sm transition-colors">Ver plan <ArrowRight size={14} /></button>
         </div>
         {recentSteps.length === 0 ? (
           <div className="px-6 py-12 text-center"><p className="text-slate-500 text-sm">No tienes pasos asignados aún</p></div>
         ) : (
-          <div className="divide-y divide-[#2a3349]">
+          <div className="divide-y divide-[#2a3354]">
             {recentSteps.map((step: any) => (
               <div key={step.id} className="flex items-center gap-3 px-6 py-4">
                 {step.status === "completada" ? <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />

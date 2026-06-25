@@ -111,35 +111,61 @@ def get_company_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_rrhh)
 ):
-    from app.models.models import Document, DocumentChunk
+    from statistics import mean
+    from app.models.models import Document, DocumentChunk, EmployeePlan
+    cid = current_user.company_id
 
     total_docs = db.query(Document).filter(
-        Document.company_id == current_user.company_id,
+        Document.company_id == cid,
         Document.status == "indexado"
     ).count()
 
     total_chunks = db.query(DocumentChunk).filter(
-        DocumentChunk.company_id == current_user.company_id
+        DocumentChunk.company_id == cid
     ).count()
 
     total_conversations = db.query(Conversation).join(User).filter(
-        User.company_id == current_user.company_id
+        User.company_id == cid
     ).count()
 
     total_messages = db.query(ChatMessage).join(
         Conversation
     ).join(User).filter(
-        User.company_id == current_user.company_id,
+        User.company_id == cid,
         ChatMessage.role == "user"
     ).count()
+
+    # Resolución IA = % de preguntas que NO requirieron escalar a RR.HH.
+    escalated = db.query(ChatMessage).join(Conversation).join(User).filter(
+        User.company_id == cid,
+        ChatMessage.role == "assistant",
+        ChatMessage.tools_used.like("%escalar_a_rrhh%"),
+    ).count()
+    ai_resolution_rate = (
+        round(max(0, total_messages - escalated) / total_messages, 2)
+        if total_messages else None
+    )
+
+    # Tiempo promedio de onboarding = duración (días) de los planes finalizados
+    finalized = db.query(EmployeePlan).filter(
+        EmployeePlan.company_id == cid,
+        EmployeePlan.status == "finalizado",
+        EmployeePlan.assigned_at.isnot(None),
+        EmployeePlan.completed_at.isnot(None),
+    ).all()
+    days = [
+        max(0.0, (ep.completed_at - ep.assigned_at).total_seconds() / 86400)
+        for ep in finalized
+    ]
+    avg_onboarding_days = round(mean(days), 1) if days else None
 
     return {
         "total_documents": total_docs,
         "total_chunks": total_chunks,
         "total_conversations": total_conversations,
         "total_questions": total_messages,
-        "ai_resolution_rate": 0.94,
-        "avg_onboarding_days": 4.2,
+        "ai_resolution_rate": ai_resolution_rate,
+        "avg_onboarding_days": avg_onboarding_days,
     }
 
 

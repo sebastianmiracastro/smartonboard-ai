@@ -27,7 +27,7 @@ const categoryLabels: Record<string, string> = {
   sin_categoria: "Sin categoría",
 };
 
-const CHART_COLORS = ["#6366f1", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#64748b"];
+const CHART_COLORS = ["#6d5cff", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#64748b"];
 
 const insightStyles: Record<string, { border: string; icon: any; color: string }> = {
   positivo: { border: "border-emerald-500/20 bg-emerald-500/5", icon: TrendingUp, color: "text-emerald-400" },
@@ -38,7 +38,7 @@ const insightStyles: Record<string, { border: string; icon: any; color: string }
 // Estado de comprensión por categoría (color = semántica del estado, no el valor crudo)
 const knowledgeStatus: Record<string, { label: string; color: string; bg: string; bar: string }> = {
   ok:        { label: "Sólido",          color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", bar: "#10b981" },
-  parcial:   { label: "Datos insuf.",    color: "text-indigo-300",  bg: "bg-indigo-500/10 border-indigo-500/20",   bar: "#6366f1" },
+  parcial:   { label: "Datos insuf.",    color: "text-indigo-300",  bg: "bg-indigo-500/10 border-indigo-500/20",   bar: "#6d5cff" },
   refuerzo:  { label: "A reforzar",      color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20",     bar: "#f59e0b" },
   perdida:   { label: "Posible pérdida", color: "text-red-400",     bg: "bg-red-500/10 border-red-500/20",         bar: "#ef4444" },
   sin_datos: { label: "Sin datos",       color: "text-slate-500",   bg: "bg-slate-500/10 border-slate-500/20",     bar: "#64748b" },
@@ -140,7 +140,7 @@ export default function EmpleadoDetailPage() {
       </button>
 
       {/* Header empleado */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-6 flex items-start justify-between">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-6 flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-indigo-500/20 border border-indigo-500/20 rounded-2xl flex items-center justify-center">
             <span className="text-indigo-400 text-lg font-semibold">{initials}</span>
@@ -173,12 +173,12 @@ export default function EmpleadoDetailPage() {
       </div>
 
       {/* Progreso onboarding */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-white font-medium">Progreso de onboarding</p>
           <span className="text-slate-400 text-sm">Día {employee.onboarding_day} de {employee.onboarding_total_days}</span>
         </div>
-        <div className="h-2 bg-[#2a3349] rounded-full overflow-hidden">
+        <div className="h-2 bg-[#2a3354] rounded-full overflow-hidden">
           <div
             className="h-full bg-indigo-500 rounded-full transition-all"
             style={{ width: `${progress}%` }}
@@ -194,7 +194,7 @@ export default function EmpleadoDetailPage() {
       <div className="grid grid-cols-2 gap-6">
 
         {/* Preguntas por categoría (datos reales del chat) */}
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <h2 className="text-white font-semibold mb-1">Preguntas por categoría</h2>
           <p className="text-slate-500 text-xs mb-4">En qué temas consulta más al agente</p>
           {categoryData.length > 0 ? (
@@ -203,8 +203,8 @@ export default function EmpleadoDetailPage() {
                 <XAxis type="number" stroke="#475569" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="label" stroke="#94a3b8" fontSize={11} width={84} />
                 <Tooltip
-                  cursor={{ fill: "#1e2536" }}
-                  contentStyle={{ background: "#0f1320", border: "1px solid #2a3349", borderRadius: 12, fontSize: 12 }}
+                  cursor={{ fill: "#1c2540" }}
+                  contentStyle={{ background: "#0f1320", border: "1px solid #2a3354", borderRadius: 12, fontSize: 12 }}
                   labelStyle={{ color: "#e2e8f0" }}
                 />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} name="Preguntas">
@@ -223,7 +223,7 @@ export default function EmpleadoDetailPage() {
         </div>
 
         {/* Tareas */}
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <h2 className="text-white font-semibold mb-4">Tareas del plan</h2>
           {tasks.length === 0 ? (
             <p className="text-slate-500 text-sm">Sin tareas asignadas.</p>
@@ -232,7 +232,7 @@ export default function EmpleadoDetailPage() {
               {tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center gap-3 p-3 bg-[#1e2536]/50 rounded-xl border border-[#2a3349]"
+                  className="flex items-center gap-3 p-3 bg-[#1c2540]/50 rounded-xl border border-[#2a3354]"
                 >
                   {taskStatusIcon(task.status)}
                   <div className="flex-1 min-w-0">
@@ -253,7 +253,7 @@ export default function EmpleadoDetailPage() {
 
       {/* Onboarding y plan (avance, tiempo real vs estimado, evaluaciones) */}
       {onboarding && onboarding.plans.length > 0 && (
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-1">
             <ClipboardList size={16} className="text-indigo-400" />
             <h2 className="text-white font-semibold">Onboarding y plan</h2>
@@ -280,7 +280,7 @@ export default function EmpleadoDetailPage() {
               const meta = planStatusMeta[p.status] || planStatusMeta.sin_empezar;
               const pct = p.total_steps > 0 ? Math.round((p.completed_steps / p.total_steps) * 100) : 0;
               return (
-                <div key={p.id} className="bg-[#1e2536]/50 rounded-xl border border-[#2a3349] p-3">
+                <div key={p.id} className="bg-[#1c2540]/50 rounded-xl border border-[#2a3354] p-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-white text-sm">{p.plan_name}</span>
@@ -292,7 +292,7 @@ export default function EmpleadoDetailPage() {
                       {p.score != null && <span className="flex items-center gap-1 text-emerald-400"><Award size={11} /> {p.score}/100</span>}
                     </div>
                   </div>
-                  <div className="mt-2 h-1.5 bg-[#2a3349] rounded-full overflow-hidden">
+                  <div className="mt-2 h-1.5 bg-[#2a3354] rounded-full overflow-hidden">
                     <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="flex items-center justify-between mt-1.5 gap-2 flex-wrap">
@@ -315,7 +315,7 @@ export default function EmpleadoDetailPage() {
 
       {/* Conocimiento y comprensión (cobertura, comprensión por categoría, pérdida) */}
       {knowledge && (
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-1">
             <Brain size={16} className="text-indigo-400" />
             <h2 className="text-white font-semibold">Conocimiento y comprensión</h2>
@@ -325,7 +325,7 @@ export default function EmpleadoDetailPage() {
           </p>
 
           {/* Cobertura temática */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 p-3 bg-[#1e2536]/50 rounded-xl border border-[#2a3349]">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4 p-3 bg-[#1c2540]/50 rounded-xl border border-[#2a3354]">
             <Target size={16} className="text-indigo-400 shrink-0" />
             {knowledge.coverage?.available > 0 ? (
               <>
@@ -374,14 +374,14 @@ export default function EmpleadoDetailPage() {
                 const st = knowledgeStatus[row.status] || knowledgeStatus.sin_datos;
                 const pct = row.comprehension != null ? Math.round(row.comprehension * 100) : null;
                 return (
-                  <div key={row.category} className="grid grid-cols-12 items-center gap-3 p-3 bg-[#1e2536]/50 rounded-xl border border-[#2a3349]">
+                  <div key={row.category} className="grid grid-cols-12 items-center gap-3 p-3 bg-[#1c2540]/50 rounded-xl border border-[#2a3354]">
                     <div className="col-span-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${categoryColors[row.category] || "bg-slate-500/10 text-slate-400 border border-slate-500/20"}`}>
                         {categoryLabels[row.category] || row.category}
                       </span>
                     </div>
                     <div className="col-span-5 flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-[#2a3349] rounded-full overflow-hidden">
+                      <div className="flex-1 h-2 bg-[#2a3354] rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all"
                           style={{ width: `${pct != null ? Math.max(pct, 4) : 0}%`, background: st.bar }}
@@ -405,7 +405,7 @@ export default function EmpleadoDetailPage() {
 
           {/* Candidatos a refuerzo / re-entreno */}
           {knowledge.retraining_candidates?.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-[#2a3349]">
+            <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-[#2a3354]">
               <RefreshCw size={14} className="text-amber-400 shrink-0" />
               <span className="text-slate-400 text-xs">Temas candidatos a refuerzo / re-entreno:</span>
               {knowledge.retraining_candidates.map((r: any) => (
@@ -420,7 +420,7 @@ export default function EmpleadoDetailPage() {
 
       {/* Insights automáticos generados a partir de las preguntas */}
       {insights.length > 0 && (
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Lightbulb size={16} className="text-amber-400" />
             <h2 className="text-white font-semibold">Insights del onboarding</h2>
@@ -445,7 +445,7 @@ export default function EmpleadoDetailPage() {
 
 function Stat({ label, value, sub, color }: { label: string; value: any; sub?: string; color?: string }) {
   return (
-    <div className="bg-[#1e2536]/50 border border-[#2a3349] rounded-xl p-3">
+    <div className="bg-[#1c2540]/50 border border-[#2a3354] rounded-xl p-3">
       <p className="text-slate-500 text-xs">{label}</p>
       <p className={`text-lg font-semibold mt-0.5 ${color || "text-white"}`}>{value}</p>
       {sub && <p className="text-slate-600 text-xs mt-0.5">{sub}</p>}

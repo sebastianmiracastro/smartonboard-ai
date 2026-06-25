@@ -203,8 +203,8 @@ export default function ChatPage() {
   return (
     <div className="flex gap-4 h-[calc(100vh-48px)]">
       {/* Panel de conversaciones */}
-      <aside className="w-64 shrink-0 flex flex-col bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-        <div className="p-3 border-b border-[#2a3349]">
+      <aside className="w-64 shrink-0 flex flex-col bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+        <div className="p-3 border-b border-[#2a3354]">
           <button
             onClick={newConversation}
             className="w-full flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-xl px-3 py-2.5 transition-colors"
@@ -229,7 +229,7 @@ export default function ChatPage() {
                 className={`group flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-colors
                   ${active
                     ? "bg-indigo-500/10 text-indigo-300"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1e2536]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1c2540]"
                   }`}
               >
                 <MessageSquare size={15} className="shrink-0" />
@@ -252,7 +252,7 @@ export default function ChatPage() {
       {/* Chat */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-3 pb-4 border-b border-[#2a3349] mb-4">
+        <div className="flex items-center gap-3 pb-4 border-b border-[#2a3354] mb-4">
           <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/20 rounded-xl flex items-center justify-center">
             <Bot size={18} className="text-indigo-400" />
           </div>
@@ -272,7 +272,7 @@ export default function ChatPage() {
               <div className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold
                 ${msg.role === "user"
                   ? "bg-indigo-500/20 border border-indigo-500/20 text-indigo-400"
-                  : "bg-[#1e2536] border border-[#2a3349] text-slate-400"
+                  : "bg-[#1c2540] border border-[#2a3354] text-slate-400"
                 }`}
               >
                 {msg.role === "user" ? "CM" : "IA"}
@@ -282,7 +282,7 @@ export default function ChatPage() {
                 <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap
                   ${msg.role === "user"
                     ? "bg-indigo-500 text-white rounded-tr-sm"
-                    : "bg-[#161b27] border border-[#2a3349] text-slate-200 rounded-tl-sm"
+                    : "bg-[#161e33] border border-[#2a3354] text-slate-200 rounded-tl-sm"
                   }`}
                 >
                   {msg.content}
@@ -309,7 +309,7 @@ export default function ChatPage() {
                     {msg.sources.map((src, i) => (
                       <div
                         key={i}
-                        className="flex items-center gap-1.5 bg-[#1e2536] border border-[#2a3349] rounded-lg px-2.5 py-1"
+                        className="flex items-center gap-1.5 bg-[#1c2540] border border-[#2a3354] rounded-lg px-2.5 py-1"
                       >
                         <FileText size={10} className="text-slate-500" />
                         <span className="text-slate-400 text-xs">
@@ -325,10 +325,10 @@ export default function ChatPage() {
 
           {loading && (
             <div className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-[#1e2536] border border-[#2a3349] flex items-center justify-center text-xs text-slate-400 shrink-0">
+              <div className="w-7 h-7 rounded-full bg-[#1c2540] border border-[#2a3354] flex items-center justify-center text-xs text-slate-400 shrink-0">
                 IA
               </div>
-              <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
+              <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
                 {[0, 1, 2].map((i) => (
                   <div
                     key={i}
@@ -350,7 +350,7 @@ export default function ChatPage() {
               <button
                 key={s}
                 onClick={() => sendMessage(s)}
-                className="bg-[#161b27] border border-[#2a3349] hover:border-indigo-500/40 text-slate-300 hover:text-indigo-300 text-xs px-3 py-2 rounded-xl transition-colors"
+                className="bg-[#161e33] border border-[#2a3354] hover:border-indigo-500/40 text-slate-300 hover:text-indigo-300 text-xs px-3 py-2 rounded-xl transition-colors"
               >
                 {s}
               </button>
@@ -359,14 +359,14 @@ export default function ChatPage() {
         )}
 
         {/* Input */}
-        <div className="flex items-center gap-3 pt-3 border-t border-[#2a3349]">
+        <div className="flex items-center gap-3 pt-3 border-t border-[#2a3354]">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             placeholder="Escribe tu pregunta..."
-            className="flex-1 bg-[#161b27] border border-[#2a3349] text-white placeholder-slate-500 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+            className="flex-1 bg-[#161e33] border border-[#2a3354] text-white placeholder-slate-500 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
           />
           <button
             onClick={() => sendMessage()}

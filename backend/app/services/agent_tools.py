@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import EmployeeTask, EmployeePlan, Document, RRHHAlert
 from app.services.rag import search_similar_chunks, build_context
+from app.services.tagging import categorize
 
 
 # Nombres canónicos de las herramientas (también se persisten en tools_used)
@@ -85,6 +86,7 @@ class ToolContext:
             user_department_id=self.user_department_id,
             user_role_id=self.user_role_id,
             top_k=self.rag_top_k,
+            prefer_category=categorize(consulta),  # prioriza el tema de la pregunta
         )
         if not chunks:
             return "No encontré información sobre eso en los documentos disponibles para tu perfil."

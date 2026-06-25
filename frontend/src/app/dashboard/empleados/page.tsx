@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ArrowRight, Plus, X, Pencil, History, KeyRound, Power, Eye, EyeOff } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 function fmtDate(iso?: string) {
   if (!iso) return "";
@@ -24,7 +25,7 @@ const statusLabels: Record<string, string> = {
   inactivo: "Inactivo",
 };
 
-const inputCls = "bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors w-full";
+const inputCls = "bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors w-full";
 const labelCls = "text-slate-400 text-xs";
 
 const emptyForm = {
@@ -53,6 +54,7 @@ const emptyForm = {
 
 export default function EmpleadosPage() {
   const router = useRouter();
+  const toast = useToast();
   const [employees, setEmployees] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
@@ -86,9 +88,11 @@ export default function EmpleadosPage() {
     try {
       await api.changeUserPassword(pwdTarget.id, pwdValue.trim());
       setPwdDone(true);
+      toast.success(`Contraseña de ${pwdTarget.full_name} restablecida`);
       setTimeout(() => setPwdTarget(null), 1200);
     } catch (e: any) {
       setPwdError(e.message || "No se pudo cambiar la contraseña.");
+      toast.error(e.message || "No se pudo restablecer la contraseña");
     } finally {
       setPwdSaving(false);
     }
@@ -99,7 +103,8 @@ export default function EmpleadosPage() {
     try {
       const updated = await api.updateUser(emp.id, { status: next });
       setEmployees((prev) => prev.map((e) => (e.id === emp.id ? { ...e, ...updated } : e)));
-    } catch (e) { console.error(e); }
+      toast.success(`${emp.full_name} ${next === "inactivo" ? "inactivado" : "activado"}`);
+    } catch (e: any) { toast.error(e.message || "No se pudo actualizar el estado"); }
     finally { setTogglingId(null); }
   };
 
@@ -209,13 +214,16 @@ export default function EmpleadosPage() {
     try {
       if (mode === "create") {
         await api.createUser({ ...payload, email: form.email, password: form.password });
+        toast.success("Empleado creado");
       } else if (editingId) {
         await api.updateUser(editingId, { ...payload, status: form.status });
+        toast.success("Cambios guardados");
       }
       setShowModal(false);
       await loadEmployees();
     } catch (err: any) {
       setError(err.message || "No se pudo guardar el empleado.");
+      toast.error(err.message || "No se pudo guardar el empleado");
     } finally {
       setSaving(false);
     }
@@ -266,7 +274,7 @@ export default function EmpleadosPage() {
             placeholder="Buscar empleado..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#161b27] border border-[#2a3349] text-white placeholder-slate-500 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full bg-[#161e33] border border-[#2a3354] text-white placeholder-slate-500 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -277,7 +285,7 @@ export default function EmpleadosPage() {
               className={`px-3 py-2 rounded-xl text-xs font-medium transition-colors
                 ${filterStatus === s
                   ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                  : "bg-[#161b27] border border-[#2a3349] text-slate-400 hover:text-slate-200"
+                  : "bg-[#161e33] border border-[#2a3354] text-slate-400 hover:text-slate-200"
                 }`}
             >
               {s === "todos" ? "Todos" : statusLabels[s]}
@@ -286,8 +294,8 @@ export default function EmpleadosPage() {
         </div>
       </div>
 
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3349] bg-[#1e2536]/50">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3354] bg-[#1c2540]/50">
           <span className="col-span-4 text-slate-500 text-xs uppercase tracking-wider">Empleado</span>
           <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Rol sistema</span>
           <span className="col-span-2 text-slate-500 text-xs uppercase tracking-wider">Estado</span>
@@ -303,7 +311,7 @@ export default function EmpleadosPage() {
           filtered.map((emp) => (
             <div
               key={emp.id}
-              className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3349] last:border-0 hover:bg-[#1e2536]/50 transition-colors items-center"
+              className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3354] last:border-0 hover:bg-[#1c2540]/50 transition-colors items-center"
             >
               <div className="col-span-4 flex items-center gap-3">
                 <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/20 rounded-full flex items-center justify-center shrink-0">
@@ -330,7 +338,7 @@ export default function EmpleadosPage() {
               <div className="col-span-2">
                 {emp.status === "onboarding" ? (
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-[#2a3349] rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-[#2a3354] rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full bg-indigo-500"
                         style={{
@@ -394,10 +402,10 @@ export default function EmpleadosPage() {
           onClick={() => !saving && setShowModal(false)}
         >
           <div
-            className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#161e33] border border-[#2a3354] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349] sticky top-0 bg-[#161b27] z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354] sticky top-0 bg-[#161e33] z-10">
               <h2 className="text-white text-lg font-semibold">
                 {mode === "create" ? "Nuevo empleado" : "Editar empleado"}
               </h2>
@@ -535,7 +543,7 @@ export default function EmpleadosPage() {
               </div>
 
               {/* ── Datos de RR.HH. ── */}
-              <p className="text-slate-500 text-xs uppercase tracking-wider mt-2 pt-2 border-t border-[#2a3349]">
+              <p className="text-slate-500 text-xs uppercase tracking-wider mt-2 pt-2 border-t border-[#2a3354]">
                 Información de RR.HH.
               </p>
 
@@ -616,7 +624,7 @@ export default function EmpleadosPage() {
 
               {/* ── Historial de cambios (auditoría) ── */}
               {mode === "edit" && (
-                <div className="mt-2 pt-3 border-t border-[#2a3349]">
+                <div className="mt-2 pt-3 border-t border-[#2a3354]">
                   <div className="flex items-center gap-2 mb-3">
                     <History size={14} className="text-slate-400" />
                     <p className="text-slate-500 text-xs uppercase tracking-wider">
@@ -628,7 +636,7 @@ export default function EmpleadosPage() {
                   ) : (
                     <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
                       {history.map((h) => (
-                        <div key={h.id} className="bg-[#0f1117] border border-[#2a3349] rounded-lg px-3 py-2 text-xs">
+                        <div key={h.id} className="bg-[#0f1629] border border-[#2a3354] rounded-lg px-3 py-2 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-slate-300 font-medium">{h.field_label || h.field}</span>
                             <span className="text-slate-600">{fmtDate(h.created_at)}</span>
@@ -649,7 +657,7 @@ export default function EmpleadosPage() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349] sticky bottom-0 bg-[#161b27]">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354] sticky bottom-0 bg-[#161e33]">
               <button
                 onClick={() => setShowModal(false)}
                 disabled={saving}
@@ -672,8 +680,8 @@ export default function EmpleadosPage() {
       {/* Modal restablecer contraseña */}
       {pwdTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !pwdSaving && setPwdTarget(null)}>
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
               <h2 className="text-white text-lg font-semibold flex items-center gap-2">
                 <KeyRound size={18} className="text-indigo-400" /> Restablecer contraseña
               </h2>
@@ -695,7 +703,7 @@ export default function EmpleadosPage() {
                     placeholder="Mínimo 6 caracteres"
                     autoFocus
                     onKeyDown={(e) => { if (e.key === "Enter") savePwd(); }}
-                    className="w-full bg-[#0f1117] border border-[#2a3349] text-white placeholder-slate-600 rounded-xl pl-3 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                    className="w-full bg-[#0f1629] border border-[#2a3354] text-white placeholder-slate-600 rounded-xl pl-3 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                   <button type="button" onClick={() => setShowPwd((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                     {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -704,7 +712,7 @@ export default function EmpleadosPage() {
               )}
             </div>
             {!pwdDone && (
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3349]">
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354]">
                 <button onClick={() => setPwdTarget(null)} disabled={pwdSaving} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl disabled:opacity-40">Cancelar</button>
                 <button onClick={savePwd} disabled={pwdSaving} className="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
                   {pwdSaving ? "Guardando..." : "Restablecer"}

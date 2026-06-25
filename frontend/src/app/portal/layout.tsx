@@ -37,13 +37,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex">
+    <div className="min-h-screen bg-[#0f1629] flex">
 
       {/* Sidebar */}
-      <aside className="w-60 bg-[#161b27] border-r border-[#2a3349] flex flex-col fixed h-full">
+      <aside className="w-60 bg-[#161e33] border-r border-[#2a3354] flex flex-col fixed h-full">
 
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 h-16 border-b border-[#2a3349]">
+        <div className="flex items-center gap-3 px-4 h-16 border-b border-[#2a3354]">
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
             <Zap size={16} className="text-white" />
           </div>
@@ -53,7 +53,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </div>
 
         {/* Empleado info */}
-        <div className="px-4 py-4 border-b border-[#2a3349]">
+        <div className="px-4 py-4 border-b border-[#2a3354]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/20 rounded-full flex items-center justify-center shrink-0">
               <span className="text-indigo-400 text-xs font-semibold">{initials}</span>
@@ -76,7 +76,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               </span>
               <span className="text-indigo-400 text-xs font-medium">{progress}%</span>
             </div>
-            <div className="h-1.5 bg-[#2a3349] rounded-full overflow-hidden">
+            <div className="h-1.5 bg-[#2a3354] rounded-full overflow-hidden">
               <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progress}%` }} />
             </div>
           </div>
@@ -93,7 +93,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors w-full text-left
                   ${active
                     ? "bg-indigo-500/10 text-indigo-400"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1e2536]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1c2540]"
                   }`}
               >
                 <item.icon size={18} />
@@ -104,7 +104,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </nav>
 
         {/* Logout */}
-        <div className="px-2 pb-4 border-t border-[#2a3349] pt-4">
+        <div className="px-2 pb-4 border-t border-[#2a3354] pt-4">
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors w-full"

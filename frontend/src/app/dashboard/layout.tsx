@@ -40,13 +40,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex">
+    <div className="min-h-screen bg-[#0f1629] flex">
 
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? "w-60" : "w-16"} bg-[#161b27] border-r border-[#2a3349] flex flex-col transition-all duration-300 fixed h-full z-10`}>
+      <aside className={`${sidebarOpen ? "w-60" : "w-16"} bg-[#161e33] border-r border-[#2a3354] flex flex-col transition-all duration-300 fixed h-full z-10`}>
 
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 h-16 border-b border-[#2a3349]">
+        <div className="flex items-center gap-3 px-4 h-16 border-b border-[#2a3354]">
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
             <Zap size={16} className="text-white" />
           </div>
@@ -71,7 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors w-full text-left
                   ${active
                     ? "bg-indigo-500/10 text-indigo-400"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1e2536]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-[#1c2540]"
                   }`}
               >
                 <item.icon size={18} className="shrink-0" />
@@ -82,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Usuario */}
-        <div className="px-2 pb-4 border-t border-[#2a3349] pt-4 flex flex-col gap-1">
+        <div className="px-2 pb-4 border-t border-[#2a3354] pt-4 flex flex-col gap-1">
           {sidebarOpen && (
             <div className="px-3 py-2 mb-1">
               <p className="text-white text-sm font-medium truncate">
@@ -107,7 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className={`flex-1 flex flex-col ${sidebarOpen ? "ml-60" : "ml-16"} transition-all duration-300`}>
 
         {/* Topbar */}
-        <header className="h-16 bg-[#161b27] border-b border-[#2a3349] flex items-center px-6 gap-4 sticky top-0 z-10">
+        <header className="h-16 bg-[#161e33] border-b border-[#2a3354] flex items-center px-6 gap-4 sticky top-0 z-10">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="text-slate-400 hover:text-white transition-colors"

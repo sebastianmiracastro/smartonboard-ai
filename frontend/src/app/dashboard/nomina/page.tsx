@@ -234,7 +234,7 @@ export default function NominaPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#2a3349]">
+      <div className="flex items-center gap-2 border-b border-[#2a3354]">
         {([
           ["resumen", "Resumen"],
           ["conceptos", "Conceptos"],
@@ -266,7 +266,7 @@ export default function NominaPage() {
           </div>
 
           {/* Nómina liquidada por mes (agrupa quincenas) */}
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-4">
               <Calendar size={16} className="text-indigo-400" />
               <p className="text-white text-sm font-medium">Nómina liquidada por mes</p>
@@ -274,8 +274,8 @@ export default function NominaPage() {
             {monthly.length === 0 ? (
               <p className="text-slate-500 text-xs">Aún no hay períodos liquidados.</p>
             ) : (
-              <div className="overflow-hidden rounded-xl border border-[#2a3349]">
-                <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-[#1e2536]/50 text-slate-500 text-xs uppercase tracking-wider">
+              <div className="overflow-hidden rounded-xl border border-[#2a3354]">
+                <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-[#1c2540]/50 text-slate-500 text-xs uppercase tracking-wider">
                   <span className="col-span-3">Mes</span>
                   <span className="col-span-2 text-center">Liquidaciones</span>
                   <span className="col-span-2 text-right">Devengado</span>
@@ -283,7 +283,7 @@ export default function NominaPage() {
                   <span className="col-span-3 text-right">Neto del mes</span>
                 </div>
                 {monthly.map((m) => (
-                  <div key={m.month} className="grid grid-cols-12 gap-2 px-4 py-2.5 border-t border-[#2a3349] text-sm items-center">
+                  <div key={m.month} className="grid grid-cols-12 gap-2 px-4 py-2.5 border-t border-[#2a3354] text-sm items-center">
                     <span className="col-span-3 text-white font-medium">{m.month}</span>
                     <span className="col-span-2 text-center text-slate-400">{m.periods}</span>
                     <span className="col-span-2 text-right text-emerald-400">{COP.format(m.total_devengado)}</span>
@@ -320,8 +320,8 @@ export default function NominaPage() {
             </button>
           </div>
 
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3349] bg-[#1e2536]/50 text-slate-500 text-xs uppercase tracking-wider">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+            <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3354] bg-[#1c2540]/50 text-slate-500 text-xs uppercase tracking-wider">
               <span className="col-span-4">Concepto</span>
               <span className="col-span-3">Tipo</span>
               <span className="col-span-3">Cálculo</span>
@@ -333,7 +333,7 @@ export default function NominaPage() {
               </div>
             ) : (
               concepts.map((c) => (
-                <div key={c.id} className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3349] last:border-0 items-center">
+                <div key={c.id} className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3354] last:border-0 items-center">
                   <div className="col-span-4">
                     <p className="text-white text-sm font-medium">{c.name}</p>
                     {c.description && <p className="text-slate-500 text-xs truncate">{c.description}</p>}
@@ -377,12 +377,12 @@ export default function NominaPage() {
           </div>
 
           {novelties.length === 0 ? (
-            <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl px-6 py-12 text-center text-slate-500 text-sm">
+            <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl px-6 py-12 text-center text-slate-500 text-sm">
               No hay novedades registradas.
             </div>
           ) : (
-            <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl overflow-hidden">
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3349] bg-[#1e2536]/50 text-slate-500 text-xs uppercase tracking-wider">
+            <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl overflow-hidden">
+              <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[#2a3354] bg-[#1c2540]/50 text-slate-500 text-xs uppercase tracking-wider">
                 <span className="col-span-3">Colaborador</span>
                 <span className="col-span-3">Concepto</span>
                 <span className="col-span-2">Tipo</span>
@@ -390,7 +390,7 @@ export default function NominaPage() {
                 <span className="col-span-2 text-right">Estado</span>
               </div>
               {novelties.map((n) => (
-                <div key={n.id} className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3349] last:border-0 items-center">
+                <div key={n.id} className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-[#2a3354] last:border-0 items-center">
                   <div className="col-span-3">
                     <p className="text-white text-sm">{n.employee_name}</p>
                   </div>
@@ -451,13 +451,13 @@ export default function NominaPage() {
           </div>
 
           {periods.length === 0 ? (
-            <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl px-6 py-12 text-center text-slate-500 text-sm">
+            <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl px-6 py-12 text-center text-slate-500 text-sm">
               No hay períodos de nómina. Crea uno para liquidar a los empleados.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {periods.map((p) => (
-                <div key={p.id} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5 flex flex-col gap-3">
+                <div key={p.id} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5 flex flex-col gap-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
@@ -465,7 +465,7 @@ export default function NominaPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           p.kind === "terminacion"
                             ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                            : "bg-[#2a3349] text-slate-400"
+                            : "bg-[#2a3354] text-slate-400"
                         }`}>
                           {p.kind === "terminacion" ? "Terminación" : "Nómina"}
                         </span>
@@ -484,7 +484,7 @@ export default function NominaPage() {
                     <Stat label="Aportes/Prov." value={COP.format(p.total_aportes)} className="text-amber-400" />
                     <Stat label="Neto a pagar" value={COP.format(p.total_neto)} className="text-white font-semibold" />
                   </div>
-                  <div className="flex items-center gap-2 pt-2 border-t border-[#2a3349]">
+                  <div className="flex items-center gap-2 pt-2 border-t border-[#2a3354]">
                     <button
                       onClick={async () => setOpenPeriod(await api.getPeriod(p.id))}
                       className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 text-xs font-medium"
@@ -717,7 +717,7 @@ export default function NominaPage() {
             <span className={`px-2 py-0.5 rounded-full ${
               openPeriod.kind === "terminacion"
                 ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                : "bg-[#2a3349] text-slate-400"
+                : "bg-[#2a3354] text-slate-400"
             }`}>
               {openPeriod.kind === "terminacion" ? "Terminación" : "Nómina"}
             </span>
@@ -727,7 +727,7 @@ export default function NominaPage() {
           </div>
           <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
             {(openPeriod.payslips || []).map((s: any) => (
-              <div key={s.id} className="bg-[#0f1117] border border-[#2a3349] rounded-xl p-4">
+              <div key={s.id} className="bg-[#0f1629] border border-[#2a3354] rounded-xl p-4">
                 <div className="flex items-start justify-between mb-1">
                   <div>
                     <p className="text-white text-sm font-medium">{s.employee_name}</p>
@@ -747,7 +747,7 @@ export default function NominaPage() {
                   </p>
                 ) : null}
 
-                <div className="flex flex-col gap-1 pt-2 border-t border-[#2a3349]">
+                <div className="flex flex-col gap-1 pt-2 border-t border-[#2a3354]">
                   {(s.items || []).map((it: any) => (
                     <div key={it.id} className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 flex items-center gap-2">
@@ -765,7 +765,7 @@ export default function NominaPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between gap-4 mt-2 pt-2 border-t border-[#2a3349] text-xs">
+                <div className="flex items-center justify-between gap-4 mt-2 pt-2 border-t border-[#2a3354] text-xs">
                   <span className="text-emerald-400">Devengado {COP.format(s.total_devengado)}</span>
                   <span className="text-red-400">Deducciones {COP.format(s.total_deduccion)}</span>
                   <span className="text-amber-400">Aportes {COP.format(s.total_aportes)}</span>
@@ -783,7 +783,7 @@ export default function NominaPage() {
 
 function MetricCard({ icon: Icon, label, value, color }: any) {
   return (
-    <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+    <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-2">
         <Icon size={16} className={color} />
         <span className="text-slate-400 text-xs">{label}</span>
@@ -797,7 +797,7 @@ function DistroCard({ title, data }: { title: string; data: Record<string, numbe
   const entries = Object.entries(data || {});
   const total = entries.reduce((a, [, v]) => a + v, 0) || 1;
   return (
-    <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-5">
+    <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
       <p className="text-white text-sm font-medium mb-4">{title}</p>
       <div className="flex flex-col gap-3">
         {entries.length === 0 && <p className="text-slate-500 text-xs">Sin datos</p>}
@@ -807,7 +807,7 @@ function DistroCard({ title, data }: { title: string; data: Record<string, numbe
               <span className="text-slate-400 capitalize">{k.replace(/_/g, " ")}</span>
               <span className="text-slate-300">{v}</span>
             </div>
-            <div className="h-1.5 bg-[#2a3349] rounded-full overflow-hidden">
+            <div className="h-1.5 bg-[#2a3354] rounded-full overflow-hidden">
               <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(v / total) * 100}%` }} />
             </div>
           </div>
@@ -839,10 +839,10 @@ function Modal({ title, children, onClose, wide }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className={`bg-[#161b27] border border-[#2a3349] rounded-2xl w-full ${wide ? "max-w-2xl" : "max-w-lg"} max-h-[90vh] overflow-y-auto`}
+        className={`bg-[#161e33] border border-[#2a3354] rounded-2xl w-full ${wide ? "max-w-2xl" : "max-w-lg"} max-h-[90vh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354]">
           <h2 className="text-white text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors">
             <X size={18} />
@@ -856,7 +856,7 @@ function Modal({ title, children, onClose, wide }: any) {
 
 function ModalFooter({ onCancel, onSave, saveLabel, saving }: any) {
   return (
-    <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-[#2a3349]">
+    <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-[#2a3354]">
       <button onClick={onCancel} disabled={saving} className="text-slate-400 hover:text-slate-200 text-sm px-4 py-2.5 rounded-xl transition-colors disabled:opacity-40">
         Cancelar
       </button>

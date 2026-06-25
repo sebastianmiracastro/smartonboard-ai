@@ -1,15 +1,20 @@
-"""Orquestador del agente de onboarding.
+"""Orquestador del agente de onboarding (optimizado para bajo consumo de tokens).
 
-Dos caminos según haya o no OPENAI_API_KEY:
+El enrutado se hace EN EL BACKEND, no en el LLM:
 
-- CON key  → agente ReAct real (`create_react_agent` de LangGraph) que decide de
-  forma autónoma qué herramienta usar vía function-calling de gpt-4o-mini.
-- SIN key  → router heurístico de intención que invoca las MISMAS herramientas
-  reales (sobre la BD) y, si la pregunta es informativa, cae al pipeline RAG+mock
-  original. Así las herramientas son demostrables sin depender del LLM.
+1. `detect_intent` clasifica la pregunta sin LLM. Las acciones (consultar/completar
+   tareas, escalar a RR.HH.) se resuelven con las herramientas reales sobre la BD
+   → 0 tokens de OpenAI.
+2. Las preguntas informativas pasan por RAG: el backend selecciona los chunks por
+   ROL (RBAC), TEMA (categoría de la pregunta) y RELEVANCIA (umbral), los MINIFICA
+   (`build_context`) y hace UNA sola llamada a OpenAI con el contexto entre <ctx>,
+   tope de tokens de salida y poco historial (`_answer_grounded`). No se pasan los
+   documentos en crudo; la respuesta se funda en esos textos minificados.
+3. Sin OPENAI_API_KEY (de la empresa o del .env) la parte informativa cae al mock.
 
-En ambos casos las herramientas viven en `app/services/agent_tools.py` y comparten
-un `ToolContext` que acumula las fuentes y los nombres de herramientas usadas.
+`_run_react_agent` (LangGraph) queda como alternativa pero NO es el camino por
+defecto, porque su bucle multi-llamada consume muchos más tokens. Las herramientas
+viven en `app/services/agent_tools.py` y comparten un `ToolContext`.
 """
 from collections import Counter
 from typing import List, Optional
@@ -96,7 +101,48 @@ ni fechas. Si no hay información en los documentos, dilo con honestidad y sugie
 quién acudir. Mantén las respuestas enfocadas: ni demasiado cortas ni un muro de texto."""
 
 
-# ─── CAMINO CON KEY: AGENTE ReAct ────────────────────────────────────────────
+# ─── PROMPT GROUNDED (conciso, optimizado para tokens) ───────────────────────
+
+def build_grounded_prompt(agent_name: str = "Sara") -> str:
+    """Prompt corto para el camino RAG de una sola llamada. El contexto va aparte."""
+    name = (agent_name or "Sara").strip() or "Sara"
+    return (
+        f"Eres {name}, asistente de onboarding. Respondes en español, cálida pero "
+        f"CONCISA (2 a 5 frases, sin muros de texto). Usa EXCLUSIVAMENTE la información "
+        f"del contexto entre <ctx></ctx> para dar datos, políticas, cifras o pasos; no "
+        f"inventes nada que no esté ahí. Si el contexto no cubre la pregunta, dilo en una "
+        f"frase y sugiere consultar a RR.HH."
+    )
+
+
+def _answer_grounded(
+    question: str,
+    context: str,
+    history: List[dict],
+    api_key: str,
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.4,
+    agent_name: str = "Sara",
+    max_tokens: int = 400,
+) -> str:
+    """Una sola llamada al LLM: system corto + contexto minificado + pregunta.
+
+    El contexto NO es el documento crudo, son los fragmentos minificados que el
+    backend ya seleccionó (por rol, tema y relevancia). Tope de tokens de salida y
+    poco historial para mantener bajo el consumo."""
+    llm = ChatOpenAI(model=model, temperature=temperature, openai_api_key=api_key, max_tokens=max_tokens)
+    messages = [SystemMessage(content=build_grounded_prompt(agent_name))]
+    for h in (history or [])[-4:]:
+        if h.get("role") == "user":
+            messages.append(HumanMessage(content=h["content"]))
+        elif h.get("role") == "assistant":
+            messages.append(AIMessage(content=h["content"]))
+    ctx_block = context if context else "(sin información relevante en los documentos accesibles)"
+    messages.append(HumanMessage(content=f"<ctx>\n{ctx_block}\n</ctx>\n\nPregunta: {question}"))
+    return llm.invoke(messages).content.strip()
+
+
+# ─── CAMINO CON KEY: AGENTE ReAct (alternativa, no usada por defecto) ─────────
 
 def _run_react_agent(
     question: str,
@@ -138,44 +184,54 @@ _ESCALAR_KW = ["ayuda humana", "hablar con rrhh", "hablar con recursos", "hablar
                "estoy frustrado", "no puedo avanzar"]
 
 
-def _run_heuristic_router(question: str, ctx: ToolContext) -> str:
+_CONSULTAR_KW = ["mis tareas", "qué tareas", "que tareas", "pendiente",
+                 "mi progreso", "qué me falta", "que me falta", "mi plan"]
+
+
+def detect_intent(question: str) -> str:
+    """Enruta la pregunta SIN LLM: las acciones de tareas/escalado se resuelven en
+    el backend (0 tokens) y solo lo informativo va al RAG."""
     q = question.lower()
-
-    # 1. Escalar a RR.HH.
     if any(kw in q for kw in _ESCALAR_KW):
-        return ctx.escalar_a_rrhh(question)
-
-    # 2. Completar una tarea (el matching por solapamiento usa el texto completo)
+        return "escalar"
     if "tarea" in q and any(kw in q for kw in _COMPLETAR_KW):
+        return "completar"
+    if any(w in q for w in _CONSULTAR_KW):
+        return "consultar_tareas"
+    return "informativa"
+
+
+def _run_heuristic_router(question: str, ctx: ToolContext) -> str:
+    """Camino sin key: misma intención, pero la parte informativa cae al mock."""
+    intent = detect_intent(question)
+    if intent == "escalar":
+        return ctx.escalar_a_rrhh(question)
+    if intent == "completar":
         return ctx.completar_tarea(question)
-
-    # 3. Consultar tareas / progreso
-    if any(w in q for w in ["mis tareas", "qué tareas", "que tareas", "pendiente",
-                            "mi progreso", "qué me falta", "que me falta"]):
+    if intent == "consultar_tareas":
         return ctx.consultar_mis_tareas()
-
-    # 4. Pregunta informativa → RAG + respuesta mock
     context = ctx.buscar_en_documentos(question)
-    encontro_docs = bool(ctx.sources)
-    return generate_mock_answer(question, context if encontro_docs else "")
+    return generate_mock_answer(question, context if ctx.sources else "")
 
 
 def generate_mock_answer(question: str, context: str) -> str:
-    q = question.lower()
+    """Respuesta sin LLM (modo demo, sin API key).
 
+    Si hay contexto recuperado, lo resume (es información REAL de los documentos).
+    Si no hay contexto, NO inventa políticas ni cifras concretas: orienta a dónde
+    buscar. Así no se afirman datos falsos."""
     if context:
-        return f"Basándome en los documentos de la empresa, encontré información relevante sobre tu consulta. {context[:300]}..."
-
-    if "vacacion" in q:
-        return "Para solicitar vacaciones debes ingresar al portal de RR.HH. con al menos 15 días de anticipación, diligenciar el formulario de solicitud y esperar aprobación de tu líder directo."
-    elif "responsabilidad" in q or "rol" in q:
-        return "Tus responsabilidades principales incluyen implementar features, escribir pruebas unitarias, participar en code reviews y documentar tus cambios según los estándares del equipo."
-    elif "jira" in q:
-        return "Para gestionar tickets en Jira: abre el ticket desde tu tablero y arrastra la tarjeta a la columna correspondiente o usa el botón de transición dentro del ticket."
-    elif "salario" in q or "sueldo" in q:
-        return "No tengo acceso a información sobre salarios en los documentos disponibles para tu perfil. Te recomiendo contactar directamente a RR.HH."
-    else:
-        return "Entiendo tu pregunta. Basándome en los documentos disponibles de la empresa puedo ayudarte. ¿Podrías ser más específico sobre lo que necesitas saber?"
+        return (
+            "Según la documentación de la empresa, esto es lo más relevante que "
+            f"encontré sobre tu consulta:\n\n{context[:400]}\n\n"
+            "¿Quieres que profundice en algún punto?"
+        )
+    return (
+        "No encontré información específica sobre eso en los documentos disponibles "
+        "para tu perfil, así que prefiero no darte datos que podrían no ser exactos. "
+        "Te recomiendo revisar la sección de Recursos o consultarlo con RR.HH. Si me "
+        "das un poco más de detalle, intento orientarte mejor."
+    )
 
 
 # ─── TÍTULO AUTOMÁTICO DE LA CONVERSACIÓN ────────────────────────────────────
@@ -253,20 +309,32 @@ def run_agent(
     # La clave de la empresa (configurada desde la UI) tiene prioridad sobre la del .env
     api_key = openai_api_key or settings.OPENAI_API_KEY
 
-    if api_key:
-        try:
-            answer = _run_react_agent(
-                question, ctx, history or [],
-                api_key=api_key,
-                model=ai_model,
-                temperature=ai_temperature,
-                agent_name=agent_name,
-            )
-        except Exception as e:
-            print(f"Agente ReAct falló, usando router heurístico: {e}")
-            answer = _run_heuristic_router(question, ctx)
+    # Enrutado en el backend: las acciones se resuelven sin LLM; solo lo informativo
+    # consume tokens, y con contexto MINIFICADO (rol + tema + relevancia).
+    intent = detect_intent(question)
+
+    if intent == "escalar":
+        answer = ctx.escalar_a_rrhh(question)
+    elif intent == "completar":
+        answer = ctx.completar_tarea(question)
+    elif intent == "consultar_tareas":
+        answer = ctx.consultar_mis_tareas()
     else:
-        answer = _run_heuristic_router(question, ctx)
+        # Informativa: el backend recupera y minifica el contexto; el LLM solo redacta.
+        context = ctx.buscar_en_documentos(question)
+        grounding = context if ctx.sources else ""
+        if api_key:
+            try:
+                answer = _answer_grounded(
+                    question, grounding, history or [],
+                    api_key=api_key, model=ai_model,
+                    temperature=ai_temperature, agent_name=agent_name,
+                )
+            except Exception as e:
+                print(f"LLM grounded falló, usando respuesta mock: {e}")
+                answer = generate_mock_answer(question, grounding)
+        else:
+            answer = generate_mock_answer(question, grounding)
 
     # Clasificación grounded: la categoría real de los chunks recuperados manda;
     # si no hubo documentos, cae a la categoría inferida de la pregunta.

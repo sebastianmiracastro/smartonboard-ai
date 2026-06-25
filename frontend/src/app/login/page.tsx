@@ -4,14 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Zap } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const toast = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgot, setForgot] = useState(false);
+  // Accesos rápidos demo: visibles en desarrollo o si se habilitan explícitamente
+  const showDemo = process.env.NEXT_PUBLIC_DEMO_LOGIN === "true" || process.env.NODE_ENV === "development";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,14 +31,14 @@ export default function LoginPage() {
         router.push("/portal/inicio");
       }
     } catch (err: any) {
-      alert(err.message || "Error al iniciar sesión");
+      toast.error(err.message || "No se pudo iniciar sesión. Revisa tus credenciales.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0f1629] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
@@ -47,7 +51,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-8">
+        <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-8">
           <h1 className="text-white text-2xl font-semibold mb-1">
             Bienvenido
           </h1>
@@ -66,7 +70,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="tu@empresa.com"
                 required
-                className="w-full bg-[#1e2536] border border-[#2a3349] text-white placeholder-slate-500 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                className="w-full bg-[#1c2540] border border-[#2a3354] text-white placeholder-slate-500 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
               />
             </div>
 
@@ -81,7 +85,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full bg-[#1e2536] border border-[#2a3349] text-white placeholder-slate-500 rounded-xl px-4 py-3 pr-11 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-[#1c2540] border border-[#2a3354] text-white placeholder-slate-500 rounded-xl px-4 py-3 pr-11 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
                 />
                 <button
                   type="button"
@@ -117,26 +121,28 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Accesos rápidos para demo */}
-          <div className="mt-6 pt-6 border-t border-[#2a3349]">
-            <p className="text-slate-500 text-xs text-center mb-3">
-              Accesos rápidos (demo)
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setEmail("andrea.salcedo@techcorp.co"); setPassword("demo123"); }}
-                className="flex-1 bg-[#1e2536] hover:bg-[#2a3349] border border-[#2a3349] text-slate-300 text-xs py-2 rounded-lg transition-colors"
-              >
-                Panel RR.HH.
-              </button>
-              <button
-                onClick={() => { setEmail("carlos.mejia@techcorp.co"); setPassword("demo123"); }}
-                className="flex-1 bg-[#1e2536] hover:bg-[#2a3349] border border-[#2a3349] text-slate-300 text-xs py-2 rounded-lg transition-colors"
-              >
-                Portal Empleado
-              </button>
+          {/* Accesos rápidos para demo (ocultos en producción) */}
+          {showDemo && (
+            <div className="mt-6 pt-6 border-t border-[#2a3354]">
+              <p className="text-slate-500 text-xs text-center mb-3">
+                Accesos rápidos (demo)
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setEmail("andrea.salcedo@techcorp.co"); setPassword("demo123"); }}
+                  className="flex-1 bg-[#1c2540] hover:bg-[#2a3354] border border-[#2a3354] text-slate-300 text-xs py-2 rounded-lg transition-colors"
+                >
+                  Panel RR.HH.
+                </button>
+                <button
+                  onClick={() => { setEmail("carlos.mejia@techcorp.co"); setPassword("demo123"); }}
+                  className="flex-1 bg-[#1c2540] hover:bg-[#2a3354] border border-[#2a3354] text-slate-300 text-xs py-2 rounded-lg transition-colors"
+                >
+                  Portal Empleado
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <p className="text-slate-600 text-xs text-center mt-6">

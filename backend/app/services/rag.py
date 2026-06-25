@@ -1,4 +1,5 @@
 import json
+import re
 from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
 from app.models.models import DocumentChunk, Document
@@ -57,10 +58,13 @@ def search_similar_chunks(
     user_role_id: str = None,
     top_k: int = 5,
     min_similarity: float = DEFAULT_MIN_SIMILARITY,
+    prefer_category: Optional[str] = None,
 ) -> List[Tuple[str, str, float, Optional[str]]]:
     """Devuelve hasta top_k chunks RELEVANTES como (content, document_id, similitud,
-    category). Filtra por RBAC (departamento, rol, seniority, confidencialidad) y
-    descarta los que no superan el umbral de similitud."""
+    category). Filtra por RBAC (departamento, rol, seniority, confidencialidad),
+    descarta los que no superan el umbral de similitud y, si se indica
+    `prefer_category`, prioriza ligeramente los chunks de esa categoría (la del tema
+    de la pregunta) sin romper el orden por relevancia real."""
     # Generar embedding de la pregunta
     query_embedding = generate_embedding(query)
 
@@ -109,17 +113,46 @@ def search_similar_chunks(
         similarity = cosine_similarity(query_embedding, chunk_embedding)
         # Solo contextos relevantes (por encima del umbral)
         if similarity >= min_similarity:
-            results.append((chunk.content, chunk.document_id, similarity, chunk.category))
+            # rank = similitud real + pequeño bono si coincide con el tema preguntado
+            boost = 0.05 if (prefer_category and chunk.category == prefer_category) else 0.0
+            results.append((chunk.content, chunk.document_id, similarity, chunk.category, similarity + boost))
 
-    # Ordenar por similitud y retornar top_k
-    results.sort(key=lambda x: x[2], reverse=True)
-    return results[:top_k]
+    # Ordenar por rank (similitud + preferencia) y devolver top_k (sin el rank)
+    results.sort(key=lambda x: x[4], reverse=True)
+    return [(c, d, sim, cat) for c, d, sim, cat, _rank in results[:top_k]]
 
-def build_context(chunks: List[Tuple[str, str, float, Optional[str]]]) -> str:
+
+def build_context(
+    chunks: List[Tuple[str, str, float, Optional[str]]],
+    max_total_chars: int = 1400,
+    max_chunk_chars: int = 420,
+) -> str:
+    """Construye un contexto MINIFICADO para el LLM: colapsa espacios, deduplica
+    fragmentos casi idénticos (el solape entre chunks) y limita el tamaño total.
+    No se pasan los documentos en crudo, solo lo justo para fundamentar la respuesta
+    y mantener bajo el consumo de tokens."""
     if not chunks:
         return ""
-    context = "Información relevante de los documentos de la empresa:\n\n"
-    for i, item in enumerate(chunks):
-        content = item[0]
-        context += f"[Fragmento {i+1}]:\n{content}\n\n"
-    return context
+    seen = set()
+    parts: List[str] = []
+    total = 0
+    for item in chunks:
+        text = re.sub(r"\s+", " ", item[0]).strip()
+        if not text:
+            continue
+        if len(text) > max_chunk_chars:
+            text = text[:max_chunk_chars].rsplit(" ", 1)[0] + "…"
+        key = text[:60].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if total + len(text) > max_total_chars:
+            remaining = max_total_chars - total
+            if remaining < 80:
+                break
+            text = text[:remaining].rsplit(" ", 1)[0] + "…"
+        parts.append(text)
+        total += len(text)
+        if total >= max_total_chars:
+            break
+    return "\n".join(f"[{i + 1}] {p}" for i, p in enumerate(parts))

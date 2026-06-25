@@ -7,6 +7,7 @@ import {
   AlertTriangle, Check,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 const STEP_TYPES = [
   { key: "lectura", label: "Lectura", icon: BookOpen },
@@ -40,6 +41,7 @@ const emptyStep = () => ({
 const emptyQuestion = () => ({ text: "", qtype: "single", category: "", options: [{ text: "", is_correct: true }, { text: "", is_correct: false }] });
 
 export default function PlanesPage() {
+  const toast = useToast();
   const [plans, setPlans] = useState<any[]>([]);
   const [tasks, setTasks] = useState<Record<string, any[]>>({});
   const [roles, setRoles] = useState<any[]>([]);
@@ -119,16 +121,16 @@ export default function PlanesPage() {
         target_role_id: planForm.target_role_id || null,
         target_department_id: planForm.target_department_id || null,
       };
-      if (planModal.edit) await api.updatePlan(planModal.edit.id, payload);
-      else await api.createPlan(payload);
+      if (planModal.edit) { await api.updatePlan(planModal.edit.id, payload); toast.success("Plan actualizado"); }
+      else { await api.createPlan(payload); toast.success("Plan creado"); }
       setPlanModal({ open: false, edit: null });
       await loadPlans();
-    } catch (e: any) { setError(e.message || "No se pudo guardar el plan."); }
+    } catch (e: any) { setError(e.message || "No se pudo guardar el plan."); toast.error(e.message || "No se pudo guardar el plan"); }
     finally { setSaving(false); }
   };
   const toggleActive = async (p: any) => {
-    try { await api.updatePlan(p.id, { is_active: !p.is_active }); await loadPlans(); }
-    catch (e) { console.error(e); }
+    try { await api.updatePlan(p.id, { is_active: !p.is_active }); await loadPlans(); toast.success(p.is_active ? "Plan desactivado" : "Plan activado"); }
+    catch (e: any) { toast.error(e.message || "No se pudo cambiar el estado del plan"); }
   };
 
   // ── Paso ──
@@ -157,9 +159,10 @@ export default function PlanesPage() {
       if (stepForm.category === "documento") payload.document_id = stepForm.document_id;
       if (stepForm.category === "cuestionario") payload.questions = stepForm.questions;
       await api.createPlanTask(stepModal.planId!, payload);
+      toast.success("Paso agregado");
       setStepModal({ open: false, planId: null });
       await Promise.all([loadTasks(stepModal.planId!), loadPlans()]);
-    } catch (e: any) { setError(e.message || "No se pudo crear el paso."); }
+    } catch (e: any) { setError(e.message || "No se pudo crear el paso."); toast.error(e.message || "No se pudo crear el paso"); }
     finally { setSaving(false); }
   };
 
@@ -171,8 +174,9 @@ export default function PlanesPage() {
     setSaving(true);
     try {
       await api.assignPlan(assignModal.plan.id, assignUser);
+      toast.success("Plan asignado al empleado");
       setAssignModal({ open: false, plan: null });
-    } catch (e: any) { setError(e.message || "No se pudo asignar."); }
+    } catch (e: any) { setError(e.message || "No se pudo asignar."); toast.error(e.message || "No se pudo asignar el plan"); }
     finally { setSaving(false); }
   };
 
@@ -183,8 +187,9 @@ export default function PlanesPage() {
     try {
       if (deleteTarget.kind === "plan") { await api.deletePlan(deleteTarget.id); await loadPlans(); }
       else { await api.deletePlanTask(deleteTarget.id); await Promise.all([loadTasks(deleteTarget.planId!), loadPlans()]); }
+      toast.success(deleteTarget.kind === "plan" ? "Plan eliminado" : "Paso eliminado");
       setDeleteTarget(null);
-    } catch (e: any) { setError(e.message || "No se pudo eliminar."); }
+    } catch (e: any) { setError(e.message || "No se pudo eliminar."); toast.error(e.message || "No se pudo eliminar"); }
     finally { setSaving(false); }
   };
 
@@ -230,7 +235,7 @@ export default function PlanesPage() {
           { label: "Auto-asignables", value: plans.filter((p) => p.auto_assign).length },
           { label: "Total pasos", value: totalSteps },
         ].map((s) => (
-          <div key={s.label} className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-4 text-center">
+          <div key={s.label} className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-4 text-center">
             <p className="text-white text-2xl font-semibold">{s.value}</p>
             <p className="text-slate-500 text-xs mt-1">{s.label}</p>
           </div>
@@ -239,12 +244,12 @@ export default function PlanesPage() {
 
       <div className="flex flex-col gap-3">
         {plans.length === 0 ? (
-          <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-10 text-center">
+          <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-10 text-center">
             <ClipboardList size={28} className="text-slate-600 mx-auto mb-2" />
             <p className="text-slate-400 text-sm">Aún no hay planes. Crea el primero.</p>
           </div>
         ) : plans.map((plan) => (
-          <div key={plan.id} className={`bg-[#161b27] border rounded-2xl overflow-hidden ${plan.is_active ? "border-[#2a3349]" : "border-[#2a3349] opacity-60"}`}>
+          <div key={plan.id} className={`bg-[#161e33] border rounded-2xl overflow-hidden ${plan.is_active ? "border-[#2a3354]" : "border-[#2a3354] opacity-60"}`}>
             <div className="flex items-center gap-4 px-6 py-4">
               <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center shrink-0 cursor-pointer" onClick={() => toggle(plan.id)}>
                 <ClipboardList size={18} className="text-indigo-400" />
@@ -278,7 +283,7 @@ export default function PlanesPage() {
             </div>
 
             {expanded === plan.id && (
-              <div className="border-t border-[#2a3349] px-6 py-4 bg-[#1e2536]/30">
+              <div className="border-t border-[#2a3354] px-6 py-4 bg-[#1c2540]/30">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-slate-400 text-xs uppercase tracking-wider">Pasos del plan</p>
                   <button onClick={() => openStep(plan.id)} className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs transition-colors">
@@ -294,7 +299,7 @@ export default function PlanesPage() {
                     {tasks[plan.id].map((task, idx) => {
                       const Icon = STEP_TYPES.find((s) => s.key === task.category)?.icon || ClipboardList;
                       return (
-                        <div key={task.id} className="flex items-center gap-3 bg-[#161b27] border border-[#2a3349] rounded-xl px-4 py-3">
+                        <div key={task.id} className="flex items-center gap-3 bg-[#161e33] border border-[#2a3354] rounded-xl px-4 py-3">
                           <span className="text-slate-600 text-xs w-5 text-center shrink-0">{idx + 1}</span>
                           <Icon size={15} className="text-slate-400 shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -343,7 +348,7 @@ export default function PlanesPage() {
               <Field label="Duración (días)"><input type="number" min={1} className="input" value={planForm.duration_days} onChange={(e) => setPlanForm({ ...planForm, duration_days: parseInt(e.target.value) || 1 })} /></Field>
               <Field label="Nota mínima para aprobar (%)"><input type="number" min={0} max={100} className="input" value={planForm.pass_threshold} onChange={(e) => setPlanForm({ ...planForm, pass_threshold: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)) })} /></Field>
             </div>
-            <label className="flex items-start gap-2 text-sm text-slate-300 cursor-pointer bg-[#0f1117] border border-[#2a3349] rounded-xl px-3 py-2.5">
+            <label className="flex items-start gap-2 text-sm text-slate-300 cursor-pointer bg-[#0f1629] border border-[#2a3354] rounded-xl px-3 py-2.5">
               <input type="checkbox" checked={planForm.auto_assign} onChange={(e) => setPlanForm({ ...planForm, auto_assign: e.target.checked })} className="accent-indigo-500 mt-0.5" />
               <span><span className="flex items-center gap-1.5"><Zap size={14} className="text-indigo-400" /> Asignar automáticamente</span>
                 <span className="text-slate-500 text-xs block mt-0.5">Se asignará solo a los empleados nuevos cuyo cargo sea el objetivo.</span></span>
@@ -363,7 +368,7 @@ export default function PlanesPage() {
                 {STEP_TYPES.map((t) => (
                   <button key={t.key} onClick={() => setStepForm({ ...stepForm, category: t.key })}
                     className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs transition-colors
-                      ${stepForm.category === t.key ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-300" : "bg-[#0f1117] border-[#2a3349] text-slate-400 hover:text-slate-200"}`}>
+                      ${stepForm.category === t.key ? "bg-indigo-500/10 border-indigo-500/40 text-indigo-300" : "bg-[#0f1629] border-[#2a3354] text-slate-400 hover:text-slate-200"}`}>
                     <t.icon size={16} /> {t.label}
                   </button>
                 ))}
@@ -394,7 +399,7 @@ export default function PlanesPage() {
                 </div>
                 {stepForm.questions.length === 0 && <p className="text-slate-500 text-sm">Agrega la primera pregunta.</p>}
                 {stepForm.questions.map((q: any, qi: number) => (
-                  <div key={qi} className="bg-[#0f1117] border border-[#2a3349] rounded-xl p-3 flex flex-col gap-2.5">
+                  <div key={qi} className="bg-[#0f1629] border border-[#2a3354] rounded-xl p-3 flex flex-col gap-2.5">
                     <div className="flex items-center gap-2">
                       <span className="text-slate-500 text-xs">P{qi + 1}</span>
                       <input className="input flex-1" value={q.text} onChange={(e) => updateQuestion(qi, { text: e.target.value })} placeholder="Enunciado de la pregunta" />
@@ -428,7 +433,7 @@ export default function PlanesPage() {
                         <div key={oi} className="flex items-center gap-2">
                           <button onClick={() => setCorrect(qi, oi)} title="Marcar como correcta"
                             className={`w-5 h-5 ${q.qtype === "single" ? "rounded-full" : "rounded-md"} border flex items-center justify-center shrink-0 transition-colors
-                              ${o.is_correct ? "bg-emerald-500 border-emerald-500 text-white" : "border-[#2a3349] text-transparent hover:border-emerald-500/50"}`}>
+                              ${o.is_correct ? "bg-emerald-500 border-emerald-500 text-white" : "border-[#2a3354] text-transparent hover:border-emerald-500/50"}`}>
                             <Check size={12} />
                           </button>
                           <input className="input flex-1 !py-1.5" value={o.text} onChange={(e) => updateOption(qi, oi, { text: e.target.value })} placeholder={`Opción ${oi + 1}`} />
@@ -490,8 +495,8 @@ function ErrBox({ msg }: { msg: string }) {
 function Modal({ title, children, onClose, wide }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className={`bg-[#161b27] border border-[#2a3349] rounded-2xl w-full ${wide ? "max-w-2xl" : "max-w-lg"} max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3349] sticky top-0 bg-[#161b27]">
+      <div className={`bg-[#161e33] border border-[#2a3354] rounded-2xl w-full ${wide ? "max-w-2xl" : "max-w-lg"} max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a3354] sticky top-0 bg-[#161e33]">
           <h2 className="text-white text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-200 transition-colors"><X size={18} /></button>
         </div>

@@ -6,8 +6,10 @@ import {
   KeyRound, Eye, EyeOff, CheckCircle2, AlertTriangle, Trash2, Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 export default function ConfiguracionPage() {
+  const toast = useToast();
   const [config, setConfig] = useState({
     agentName: "Sara",
     welcomeMessage: "Hola 👋 Soy tu asistente de onboarding. Estoy aquí para ayudarte con cualquier duda sobre la empresa, tu rol, procesos o herramientas.",
@@ -77,8 +79,10 @@ export default function ConfiguracionPage() {
       setRemoveKey(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      toast.success("Configuración del agente guardada");
     } catch (e: any) {
       setError(e.message || "No se pudo guardar");
+      toast.error(e.message || "No se pudo guardar la configuración");
     } finally {
       setSaving(false);
     }
@@ -108,7 +112,7 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Conexión con IA (API Key) */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-6">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <KeyRound size={18} className="text-indigo-400" />
@@ -131,8 +135,19 @@ export default function ConfiguracionPage() {
           agente responde en modo demostración con respuestas predefinidas.
         </p>
 
+        {/* Indicador persistente: la clave ya está guardada (no se muestra completa por seguridad) */}
+        {hasApiKey && !removeKey && (
+          <div className="flex items-center gap-2 mb-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-3 py-2.5">
+            <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+            <span className="text-slate-300 text-sm">
+              Clave guardada: <span className="font-mono text-emerald-400">{apiKeyPreview ?? "sk-••••"}</span>
+            </span>
+            <span className="text-slate-500 text-xs ml-auto hidden sm:block">Escribe abajo solo para reemplazarla</span>
+          </div>
+        )}
+
         <label className="text-slate-300 text-sm font-medium mb-1.5 block">
-          OpenAI API Key
+          {hasApiKey && !removeKey ? "Reemplazar clave (opcional)" : "OpenAI API Key"}
         </label>
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -142,7 +157,7 @@ export default function ConfiguracionPage() {
               onChange={(e) => { setApiKeyInput(e.target.value); setRemoveKey(false); }}
               placeholder={hasApiKey && !removeKey ? `Clave configurada (${apiKeyPreview ?? "•••• "})` : "sk-..."}
               autoComplete="off"
-              className="w-full bg-[#1e2536] border border-[#2a3349] text-white rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors font-mono"
+              className="w-full bg-[#1c2540] border border-[#2a3354] text-white rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors font-mono"
             />
             <button
               type="button"
@@ -183,7 +198,7 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Identidad */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-6">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <Bot size={18} className="text-indigo-400" />
           <h2 className="text-white font-semibold">Identidad del agente</h2>
@@ -198,7 +213,7 @@ export default function ConfiguracionPage() {
               type="text"
               value={config.agentName}
               onChange={(e) => setConfig({ ...config, agentName: e.target.value })}
-              className="w-full bg-[#1e2536] border border-[#2a3349] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+              className="w-full bg-[#1c2540] border border-[#2a3354] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
 
@@ -210,14 +225,14 @@ export default function ConfiguracionPage() {
               value={config.welcomeMessage}
               onChange={(e) => setConfig({ ...config, welcomeMessage: e.target.value })}
               rows={3}
-              className="w-full bg-[#1e2536] border border-[#2a3349] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+              className="w-full bg-[#1c2540] border border-[#2a3354] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors resize-none"
             />
           </div>
         </div>
       </div>
 
       {/* Modelo */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-6">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <Sliders size={18} className="text-indigo-400" />
           <h2 className="text-white font-semibold">Parámetros del modelo</h2>
@@ -231,7 +246,7 @@ export default function ConfiguracionPage() {
             <select
               value={config.model}
               onChange={(e) => setConfig({ ...config, model: e.target.value })}
-              className="w-full bg-[#1e2536] border border-[#2a3349] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+              className="w-full bg-[#1c2540] border border-[#2a3354] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
             >
               <option value="gpt-4o-mini">GPT-4o Mini (recomendado)</option>
               <option value="gpt-4o">GPT-4o</option>
@@ -290,7 +305,7 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Permisos del agente */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-6">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <Shield size={18} className="text-indigo-400" />
           <h2 className="text-white font-semibold">Control de respuestas</h2>
@@ -305,7 +320,7 @@ export default function ConfiguracionPage() {
           ].map((item) => (
             <div
               key={item.key}
-              className="flex items-start justify-between gap-4 p-4 bg-[#1e2536]/50 rounded-xl border border-[#2a3349]"
+              className="flex items-start justify-between gap-4 p-4 bg-[#1c2540]/50 rounded-xl border border-[#2a3354]"
             >
               <div className="flex-1">
                 <p className="text-white text-sm font-medium">{item.label}</p>
@@ -314,7 +329,7 @@ export default function ConfiguracionPage() {
               <button
                 onClick={() => setConfig({ ...config, [item.key]: !config[item.key as keyof typeof config] })}
                 className={`relative w-11 h-6 rounded-full transition-colors shrink-0 mt-0.5
-                  ${config[item.key as keyof typeof config] ? "bg-indigo-500" : "bg-[#2a3349]"}`}
+                  ${config[item.key as keyof typeof config] ? "bg-indigo-500" : "bg-[#2a3354]"}`}
               >
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform
                   ${config[item.key as keyof typeof config] ? "translate-x-5" : "translate-x-0.5"}`}
@@ -326,16 +341,16 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Preview mensaje */}
-      <div className="bg-[#161b27] border border-[#2a3349] rounded-2xl p-6">
+      <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <MessageSquare size={18} className="text-indigo-400" />
           <h2 className="text-white font-semibold">Vista previa</h2>
         </div>
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 bg-[#1e2536] border border-[#2a3349] rounded-full flex items-center justify-center text-xs text-slate-400 shrink-0">
+          <div className="w-8 h-8 bg-[#1c2540] border border-[#2a3354] rounded-full flex items-center justify-center text-xs text-slate-400 shrink-0">
             IA
           </div>
-          <div className="bg-[#1e2536] border border-[#2a3349] rounded-2xl rounded-tl-sm px-4 py-3 text-slate-200 text-sm leading-relaxed">
+          <div className="bg-[#1c2540] border border-[#2a3354] rounded-2xl rounded-tl-sm px-4 py-3 text-slate-200 text-sm leading-relaxed">
             {config.welcomeMessage}
           </div>
         </div>
@@ -361,7 +376,7 @@ export default function ConfiguracionPage() {
         </button>
         <button
           onClick={() => window.location.reload()}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#161b27] border border-[#2a3349] text-slate-400 hover:text-slate-200 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[#161e33] border border-[#2a3354] text-slate-400 hover:text-slate-200 transition-colors"
         >
           <RotateCcw size={16} />
           Restablecer
