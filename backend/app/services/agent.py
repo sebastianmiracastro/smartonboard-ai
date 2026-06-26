@@ -10,20 +10,25 @@ El enrutado se hace EN EL BACKEND, no en el LLM:
    (`build_context`) y hace UNA sola llamada a OpenAI con el contexto entre <ctx>,
    tope de tokens de salida y poco historial (`_answer_grounded`). No se pasan los
    documentos en crudo; la respuesta se funda en esos textos minificados.
-3. Sin OPENAI_API_KEY (de la empresa o del .env) la parte informativa cae al mock.
+3. Sin clave de IA (la empresa no la configuró en la UI) la parte informativa la
+   resuelve el SINTETIZADOR EXTRACTIVO propio (`extractive.py`): selecciona y
+   reorganiza con embeddings locales las oraciones más pertinentes de varios
+   fragmentos. 100% offline y gratis, sin depender de ningún proveedor externo.
 
 `_run_react_agent` (LangGraph) queda como alternativa pero NO es el camino por
 defecto, porque su bucle multi-llamada consume muchos más tokens. Las herramientas
 viven en `app/services/agent_tools.py` y comparten un `ToolContext`.
 """
+import json
+import traceback
 from collections import Counter
 from typing import List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.services.tagging import categorize
+from app.services.extractive import synthesize_answer
 from app.services.agent_tools import (
     ToolContext,
     build_langchain_tools,
@@ -104,14 +109,31 @@ quién acudir. Mantén las respuestas enfocadas: ni demasiado cortas ni un muro 
 # ─── PROMPT GROUNDED (conciso, optimizado para tokens) ───────────────────────
 
 def build_grounded_prompt(agent_name: str = "Sara") -> str:
-    """Prompt corto para el camino RAG de una sola llamada. El contexto va aparte."""
+    """Prompt del camino RAG. El contexto (fragmentos de varios documentos) va aparte
+    entre <ctx></ctx>. El objetivo es una respuesta COMPLETA, no un resumen recortado."""
     name = (agent_name or "Sara").strip() or "Sara"
     return (
-        f"Eres {name}, asistente de onboarding. Respondes en español, cálida pero "
-        f"CONCISA (2 a 5 frases, sin muros de texto). Usa EXCLUSIVAMENTE la información "
-        f"del contexto entre <ctx></ctx> para dar datos, políticas, cifras o pasos; no "
-        f"inventes nada que no esté ahí. Si el contexto no cubre la pregunta, dilo en una "
-        f"frase y sugiere consultar a RR.HH."
+        f"Eres {name}, asistente de onboarding de la empresa. Respondes en español, "
+        f"cálida y cercana, pero sobre todo COMPLETA y bien organizada.\n\n"
+        f"El contexto entre <ctx></ctx> son fragmentos REALES extraídos de los documentos "
+        f"internos (pueden venir de varios documentos, en desorden, con ideas cortadas o "
+        f"solapadas). Tu trabajo es REORGANIZAR y SINTETIZAR esos fragmentos en una "
+        f"respuesta coherente y exhaustiva a la pregunta del empleado.\n\n"
+        f"Reglas:\n"
+        f"- Usa TODA la información relevante del contexto: recórrelo entero, no te quedes "
+        f"con el primer fragmento. Une las piezas que tratan el mismo tema aunque estén "
+        f"separadas.\n"
+        f"- Reconstruye ideas que aparezcan cortadas entre fragmentos hasta dejarlas claras.\n"
+        f"- Cuando aplique, estructura la respuesta con pasos numerados o viñetas, e incluye "
+        f"todos los detalles concretos (requisitos, plazos, cifras, responsables, enlaces).\n"
+        f"- Básate EXCLUSIVAMENTE en el contexto para datos, políticas, cifras o pasos: no "
+        f"inventes nada que no esté ahí.\n"
+        f"- Si el contexto cubre la pregunta solo en parte, responde a fondo lo que SÍ está "
+        f"cubierto y señala con claridad qué falta y a quién acudir (RR.HH.).\n"
+        f"- Si el contexto no contiene nada relevante, dilo con honestidad y sugiere "
+        f"consultar a RR.HH.; no rellenes con suposiciones.\n"
+        f"- Extensión libre: sé tan detallado como haga falta para no dejar brechas, pero "
+        f"sin repetir ni divagar."
     )
 
 
@@ -123,16 +145,17 @@ def _answer_grounded(
     model: str = "gpt-4o-mini",
     temperature: float = 0.4,
     agent_name: str = "Sara",
-    max_tokens: int = 400,
+    max_tokens: int = 1500,
 ) -> str:
-    """Una sola llamada al LLM: system corto + contexto minificado + pregunta.
+    """Llamada al LLM para REDACTAR la respuesta a partir del contexto recuperado.
 
-    El contexto NO es el documento crudo, son los fragmentos minificados que el
-    backend ya seleccionó (por rol, tema y relevancia). Tope de tokens de salida y
-    poco historial para mantener bajo el consumo."""
+    El contexto son los fragmentos que el backend ya recuperó a fondo (varias
+    consultas + vecinos). Se da un presupuesto de salida amplio para que la respuesta
+    sea completa y reorganice las ideas sin recortar. El consumo de tokens es
+    secundario frente a la completitud."""
     llm = ChatOpenAI(model=model, temperature=temperature, openai_api_key=api_key, max_tokens=max_tokens)
     messages = [SystemMessage(content=build_grounded_prompt(agent_name))]
-    for h in (history or [])[-4:]:
+    for h in (history or [])[-6:]:
         if h.get("role") == "user":
             messages.append(HumanMessage(content=h["content"]))
         elif h.get("role") == "assistant":
@@ -140,6 +163,58 @@ def _answer_grounded(
     ctx_block = context if context else "(sin información relevante en los documentos accesibles)"
     messages.append(HumanMessage(content=f"<ctx>\n{ctx_block}\n</ctx>\n\nPregunta: {question}"))
     return llm.invoke(messages).content.strip()
+
+
+# ─── EXPANSIÓN DE CONSULTAS (investigar desde varios ángulos) ─────────────────
+
+def _heuristic_expansions(question: str) -> List[str]:
+    """Reformulaciones sin LLM: añade las palabras clave de la categoría detectada
+    para ampliar el recall de la búsqueda semántica cuando no hay API key."""
+    from app.services.tagging import categorize, CATEGORY_KEYWORDS
+    cat = categorize(question)
+    kws = CATEGORY_KEYWORDS.get(cat, [])[:6]
+    extra = []
+    if kws:
+        extra.append(f"{question} {' '.join(kws)}")
+    return extra
+
+
+def expand_queries(
+    question: str,
+    api_key: Optional[str],
+    model: str = "gpt-4o-mini",
+    max_queries: int = 5,
+) -> List[str]:
+    """Genera varias reformulaciones / sub-preguntas de la pregunta para buscar el
+    tema desde distintos ángulos (sinónimos, sub-temas, términos técnicos).
+
+    Con API key usa una llamada barata al LLM; sin clave, cae a una expansión
+    heurística por palabras clave. Devuelve SOLO las consultas extra (sin la
+    original, que el llamador añade siempre)."""
+    if not api_key:
+        return _heuristic_expansions(question)
+    try:
+        llm = ChatOpenAI(model=model, temperature=0.3, openai_api_key=api_key, max_tokens=200)
+        msgs = [
+            SystemMessage(content=(
+                "Eres un asistente de búsqueda. Dada la pregunta de un empleado, genera "
+                f"hasta {max_queries} reformulaciones y sub-preguntas en español que sirvan "
+                "para BUSCAR la respuesta en documentos internos desde distintos ángulos: "
+                "usa sinónimos, divide la pregunta en sus partes y añade términos clave "
+                "relacionados. Devuelve SOLO un array JSON de strings, sin explicaciones."
+            )),
+            HumanMessage(content=question),
+        ]
+        raw = llm.invoke(msgs).content.strip()
+        start, end = raw.find("["), raw.rfind("]")
+        if start == -1 or end == -1:
+            return _heuristic_expansions(question)
+        items = json.loads(raw[start:end + 1])
+        out = [str(q).strip() for q in items if str(q).strip() and str(q).strip().lower() != question.strip().lower()]
+        return out[:max_queries] if out else _heuristic_expansions(question)
+    except Exception as e:
+        print(f"expand_queries falló, usando expansión heurística: {e}")
+        return _heuristic_expansions(question)
 
 
 # ─── CAMINO CON KEY: AGENTE ReAct (alternativa, no usada por defecto) ─────────
@@ -210,21 +285,41 @@ def _run_heuristic_router(question: str, ctx: ToolContext) -> str:
         return ctx.completar_tarea(question)
     if intent == "consultar_tareas":
         return ctx.consultar_mis_tareas()
-    context = ctx.buscar_en_documentos(question)
-    return generate_mock_answer(question, context if ctx.sources else "")
+    extra_queries = expand_queries(question, api_key=None)
+    context = ctx.buscar_en_documentos(question, queries=extra_queries)
+    return _extractive_or_mock(question, ctx, extra_queries, context if ctx.sources else "")
+
+
+def _extractive_or_mock(question, ctx, extra_queries, grounding: str) -> str:
+    """Respuesta sin LLM: primero intenta el sintetizador extractivo propio (rico,
+    reorganiza oraciones de varios fragmentos); si no hay material aprovechable, cae
+    al mensaje de orientación."""
+    if ctx.sources and ctx.retrieved_chunks:
+        synthesized = synthesize_answer(question, ctx.retrieved_chunks, extra_queries)
+        if synthesized:
+            return synthesized
+    return generate_mock_answer(question, grounding)
 
 
 def generate_mock_answer(question: str, context: str) -> str:
     """Respuesta sin LLM (modo demo, sin API key).
 
-    Si hay contexto recuperado, lo resume (es información REAL de los documentos).
-    Si no hay contexto, NO inventa políticas ni cifras concretas: orienta a dónde
-    buscar. Así no se afirman datos falsos."""
+    Si hay contexto recuperado, lo presenta organizado (es información REAL de los
+    documentos). Sin LLM no puede reorganizar las ideas, pero al menos muestra el
+    material relevante completo en vez de un recorte. Si no hay contexto, NO inventa
+    políticas ni cifras: orienta a dónde buscar."""
     if context:
+        # Limpiar los encabezados de documento y limitar a un tamaño legible
+        cleaned = context.replace("=== Documento:", "📄").replace("===", "").strip()
+        snippet = cleaned[:1500].rstrip()
+        if len(cleaned) > 1500:
+            snippet = snippet.rsplit(" ", 1)[0] + "…"
         return (
-            "Según la documentación de la empresa, esto es lo más relevante que "
-            f"encontré sobre tu consulta:\n\n{context[:400]}\n\n"
-            "¿Quieres que profundice en algún punto?"
+            "Esto es lo que encontré en la documentación de la empresa sobre tu "
+            f"consulta:\n\n{snippet}\n\n"
+            "💡 Para respuestas redactadas y completas (que unan toda esta información), "
+            "configura la clave de IA en Configuración. ¿Quieres que te oriente en algún "
+            "punto concreto?"
         )
     return (
         "No encontré información específica sobre eso en los documentos disponibles "
@@ -248,15 +343,14 @@ def generate_title(
         fallback = fallback[:45].rsplit(" ", 1)[0] + "…"
     fallback = fallback or "Nueva conversación"
 
-    resolved_key = api_key or settings.OPENAI_API_KEY
-    if not resolved_key:
+    if not api_key:
         return fallback
 
     try:
         llm = ChatOpenAI(
             model=model,
             temperature=0.2,
-            openai_api_key=resolved_key,
+            openai_api_key=api_key,
             max_tokens=20,
         )
         messages = [
@@ -306,8 +400,9 @@ def run_agent(
 
     category, depth = classify(question)
 
-    # La clave de la empresa (configurada desde la UI) tiene prioridad sobre la del .env
-    api_key = openai_api_key or settings.OPENAI_API_KEY
+    # La ÚNICA fuente de la clave de IA es la configuración de la empresa (UI/frontend).
+    # No se lee del entorno: sin clave activa, responde el sintetizador extractivo propio.
+    api_key = openai_api_key
 
     # Enrutado en el backend: las acciones se resuelven sin LLM; solo lo informativo
     # consume tokens, y con contexto MINIFICADO (rol + tema + relevancia).
@@ -320,21 +415,30 @@ def run_agent(
     elif intent == "consultar_tareas":
         answer = ctx.consultar_mis_tareas()
     else:
-        # Informativa: el backend recupera y minifica el contexto; el LLM solo redacta.
-        context = ctx.buscar_en_documentos(question)
+        # Informativa: el backend investiga a fondo (varias consultas + vecinos) y el
+        # LLM reorganiza los fragmentos en una respuesta completa.
+        # 1) Expandir la pregunta en varias consultas (varios ángulos de búsqueda).
+        extra_queries = expand_queries(question, api_key, model=ai_model)
+        # 2) Recuperación profunda con todas las consultas.
+        context = ctx.buscar_en_documentos(question, queries=extra_queries)
         grounding = context if ctx.sources else ""
         if api_key:
             try:
+                # 3) El LLM redacta una respuesta completa fundada en el contexto.
                 answer = _answer_grounded(
                     question, grounding, history or [],
                     api_key=api_key, model=ai_model,
                     temperature=ai_temperature, agent_name=agent_name,
                 )
             except Exception as e:
-                print(f"LLM grounded falló, usando respuesta mock: {e}")
-                answer = generate_mock_answer(question, grounding)
+                # Falla la IA (clave inválida, modelo no disponible, red): se registra
+                # el error completo para diagnóstico y se cae al modo demo.
+                print("⚠️  La llamada al LLM falló; se usa el sintetizador extractivo. Detalle:")
+                traceback.print_exc()
+                answer = _extractive_or_mock(question, ctx, extra_queries, grounding)
         else:
-            answer = generate_mock_answer(question, grounding)
+            # Sin clave de IA: responde el sintetizador extractivo propio (offline).
+            answer = _extractive_or_mock(question, ctx, extra_queries, grounding)
 
     # Clasificación grounded: la categoría real de los chunks recuperados manda;
     # si no hubo documentos, cae a la categoría inferida de la pregunta.

@@ -1,13 +1,16 @@
-"""Migraciones ligeras para SQLite en desarrollo.
+"""Migraciones ligeras, portables entre SQLite y PostgreSQL.
 
 create_all() crea tablas nuevas pero NO agrega columnas a tablas existentes.
 Esta función agrega columnas faltantes con ALTER TABLE de forma idempotente,
 para no tener que borrar la base de datos en cada cambio de esquema.
+
+Usa el inspector de SQLAlchemy (agnóstico al motor) para detectar tablas y
+columnas existentes, y normaliza el DDL según el dialecto activo.
 """
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from app.db.database import engine
 
-# tabla -> { columna: definición SQL }
+# tabla -> { columna: definición SQL (en sintaxis SQLite/genérica) }
 COLUMNS = {
     "companies": {
         "openai_api_key": "TEXT",
@@ -84,18 +87,27 @@ COLUMNS = {
 }
 
 
+def _normalize_ddl(ddl: str, dialect: str) -> str:
+    """Adapta el DDL genérico (escrito para SQLite) al dialecto activo."""
+    if dialect == "postgresql":
+        # PostgreSQL no acepta DATETIME ni booleanos como enteros.
+        ddl = ddl.replace("DATETIME", "TIMESTAMP")
+        ddl = ddl.replace("BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT false")
+        ddl = ddl.replace("BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT true")
+    return ddl
+
+
 def run_migrations():
-    with engine.connect() as conn:
+    inspector = inspect(engine)
+    dialect = engine.dialect.name
+    existing_tables = set(inspector.get_table_names())
+
+    with engine.begin() as conn:
         for table, cols in COLUMNS.items():
-            # ¿existe la tabla?
-            exists = conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-                {"t": table},
-            ).first()
-            if not exists:
+            if table not in existing_tables:
                 continue
-            existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            existing = {c["name"] for c in inspector.get_columns(table)}
             for col, ddl in cols.items():
                 if col not in existing:
+                    ddl = _normalize_ddl(ddl, dialect)
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
-        conn.commit()

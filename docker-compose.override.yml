@@ -1,0 +1,38 @@
+# =====================================================================
+# Configuracion de DESARROLLO (hot-reload).
+# Docker Compose aplica este archivo AUTOMATICAMENTE encima de
+# docker-compose.yml cuando corres "docker compose up".
+#
+# Monta el codigo de tu PC dentro de los contenedores: editas un
+# archivo en tu editor y se refleja al instante, SIN reconstruir
+# imagenes y SIN tener varias terminales con las apps.
+#
+#   docker compose up --build                  -> DEV  (base + este override)
+#   docker compose -f docker-compose.yml up    -> PROD (ignora este override)
+# =====================================================================
+
+services:
+
+  backend:
+    # Monta el codigo en vivo; uvicorn --reload recarga al detectar cambios.
+    volumes:
+      - ./backend:/app
+      - /app/venv          # volumen anonimo: NO pisar con el venv (Windows) del host
+    environment:
+      # Deteccion de cambios fiable en bind-mounts de Docker Desktop / Windows.
+      - WATCHFILES_FORCE_POLLING=true
+    command: >
+      sh -c "python -m app.db.seed && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build:
+      target: dev          # usa la etapa "dev" del Dockerfile (next dev, no build de prod)
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # volumen anonimo: conserva los node_modules (Linux) del contenedor
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      # Hot-reload de Next.js fiable en bind-mounts de Docker / Windows.
+      - WATCHPACK_POLLING=true
+    command: npm run dev

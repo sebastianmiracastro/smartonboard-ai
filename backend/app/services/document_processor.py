@@ -4,9 +4,11 @@ from typing import List
 from pypdf import PdfReader
 from docx import Document as DocxDocument
 
-# Parámetros de fragmentación (contextos coherentes, no fragmentos arbitrarios)
-DEFAULT_CHUNK_SIZE = 800      # tamaño objetivo del contexto en caracteres
-DEFAULT_OVERLAP = 120         # solape entre contextos (continuidad), recortado a palabra
+# Parámetros de fragmentación (contextos coherentes, no fragmentos arbitrarios).
+# Fragmentos algo más grandes con buen solape: cada chunk conserva una idea completa
+# y la recuperación (con vecinos) reconstruye el hilo sin cortar a la mitad.
+DEFAULT_CHUNK_SIZE = 1000     # tamaño objetivo del contexto en caracteres
+DEFAULT_OVERLAP = 180         # solape entre contextos (continuidad), recortado a palabra
 MIN_CHUNK_LEN = 40            # descarta fragmentos demasiado cortos (encabezados, ruido)
 
 

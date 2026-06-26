@@ -16,11 +16,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
-    # OpenAI
-    OPENAI_API_KEY: Optional[str] = None
+    # La clave de IA NO se configura por entorno: cada empresa la guarda desde la UI
+    # (multi-tenant). Sin clave activa, el agente usa el sintetizador extractivo propio.
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # ignora variables del .env que ya no usamos (p. ej. OPENAI_API_KEY)
 
 settings = Settings()
 

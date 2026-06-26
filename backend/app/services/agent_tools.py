@@ -16,7 +16,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.models import EmployeeTask, EmployeePlan, Document, RRHHAlert
-from app.services.rag import search_similar_chunks, build_context
+from app.services.rag import deep_retrieve, build_rich_context, RetrievedChunk
 from app.services.tagging import categorize
 
 
@@ -62,6 +62,8 @@ class ToolContext:
     # Acumuladores que el orquestador lee después de ejecutar las tools
     sources: List[dict] = field(default_factory=list)
     tools_used: List[str] = field(default_factory=list)
+    # Fragmentos recuperados en la última búsqueda (los usa el sintetizador extractivo)
+    retrieved_chunks: List[RetrievedChunk] = field(default_factory=list)
     # Señales para las métricas de conocimiento (las llena buscar_en_documentos)
     matched_categories: List[str] = field(default_factory=list)
     answer_confidence: float = 0.0
@@ -72,32 +74,48 @@ class ToolContext:
 
     # ─── Herramientas ────────────────────────────────────────────────────────
 
-    def buscar_en_documentos(self, consulta: str) -> str:
-        """Busca información en los documentos de la empresa accesibles al
-        empleado (respeta permisos RBAC) y devuelve los fragmentos relevantes."""
+    def buscar_en_documentos(self, consulta: str, queries: Optional[List[str]] = None) -> str:
+        """Investiga a FONDO en los documentos accesibles (respeta RBAC).
+
+        No se queda con la primera coincidencia: usa `deep_retrieve` con varias
+        reformulaciones de la pregunta (`queries`), trae fragmentos vecinos para no
+        cortar ideas y ensambla un contexto completo y legible. Pensado para que el
+        LLM reorganice esos fragmentos en una respuesta sin brechas.
+        """
         self._mark(TOOL_BUSCAR)
-        chunks = search_similar_chunks(
+        # Consultas a lanzar: la original + sus reformulaciones (si las hay)
+        all_queries = [consulta] + [q for q in (queries or []) if q and q.strip()]
+        # Profundidad de la búsqueda: generosa por diseño (completitud > tokens)
+        max_chunks = max(12, self.rag_top_k * 4)
+        chunks = deep_retrieve(
             db=self.db,
             company_id=self.company_id,
-            query=consulta,
+            queries=all_queries,
             user_is_rrhh=self.user_is_rrhh,
             user_is_gerencia=self.user_is_gerencia,
             user_seniority_level=self.user_seniority_level,
             user_department_id=self.user_department_id,
             user_role_id=self.user_role_id,
-            top_k=self.rag_top_k,
+            max_chunks=max_chunks,
+            neighbor_radius=1,
             prefer_category=categorize(consulta),  # prioriza el tema de la pregunta
         )
+        # Guardar los fragmentos para el sintetizador extractivo (camino sin clave de IA)
+        self.retrieved_chunks = chunks
+
         if not chunks:
             return "No encontré información sobre eso en los documentos disponibles para tu perfil."
 
-        # Señales para métricas: categorías reales de los chunks y mejor similitud
-        self.matched_categories.extend(c for _, _, _, c in chunks if c)
-        top_sim = max((sim for _, _, sim, _ in chunks), default=0.0)
+        # Señales para métricas: categorías reales de los chunks relevantes (no los
+        # vecinos de relleno) y mejor similitud alcanzada.
+        self.matched_categories.extend(
+            c.category for c in chunks if c.category and not c.is_neighbor
+        )
+        top_sim = max((c.similarity for c in chunks), default=0.0)
         self.answer_confidence = max(self.answer_confidence, top_sim)
 
         # Registrar las fuentes (documentos) para mostrarlas en el chat
-        doc_ids = list({doc_id for _, doc_id, _, _ in chunks})
+        doc_ids = list({c.document_id for c in chunks})
         docs = self.db.query(Document).filter(Document.id.in_(doc_ids)).all()
         doc_names = {d.id: d.name for d in docs}
         for doc_id in doc_ids:
@@ -105,7 +123,7 @@ class ToolContext:
             if src not in self.sources:
                 self.sources.append(src)
 
-        return build_context(chunks)
+        return build_rich_context(chunks, doc_names=doc_names)
 
     def _lost_plan_ids(self) -> set:
         """Ids de planes 'perdidos' del empleado (sus pasos ya no cuentan)."""
