@@ -6,7 +6,9 @@ from app.models.models import User, Role, Department, UserChangeLog
 from app.schemas.schemas import UserOut, UserCreate, UserUpdate, UserChangeLogOut, PasswordChange
 from app.core.security import hash_password
 from app.core.dependencies import get_current_user, require_rrhh
-from app.services.onboarding import auto_assign_plans_for_user, pause_running_steps
+from app.services.onboarding import (
+    auto_assign_plans_for_user, pause_running_steps, attach_onboarding_progress,
+)
 
 router = APIRouter(prefix="/api/users", tags=["Usuarios"])
 
@@ -18,7 +20,6 @@ FIELD_LABELS = {
     "system_role": "Rol del sistema",
     "status": "Estado",
     "start_date": "Fecha de ingreso",
-    "onboarding_total_days": "Días de onboarding",
     "document_id": "Cédula / Documento",
     "gender": "Género",
     "birth_date": "Fecha de nacimiento",
@@ -33,17 +34,18 @@ FIELD_LABELS = {
 }
 
 @router.get("/me", response_model=UserOut)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return attach_onboarding_progress(db, current_user)
 
 @router.get("/", response_model=List[UserOut])
 def get_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_rrhh)
 ):
-    return db.query(User).filter(
+    users = db.query(User).filter(
         User.company_id == current_user.company_id
     ).all()
+    return [attach_onboarding_progress(db, u) for u in users]
 
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
@@ -83,7 +85,6 @@ def create_user(
         system_role=data.system_role,
         status="onboarding" if data.system_role == "empleado" else "activo",
         start_date=data.start_date,
-        onboarding_total_days=data.onboarding_total_days,
         document_id=data.document_id,
         gender=data.gender,
         birth_date=data.birth_date,
@@ -104,7 +105,7 @@ def create_user(
     auto_assign_plans_for_user(db, user)
     db.commit()
     db.refresh(user)
-    return user
+    return attach_onboarding_progress(db, user)
 
 @router.get("/{user_id}", response_model=UserOut)
 def get_user(
@@ -118,7 +119,7 @@ def get_user(
     ).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return user
+    return attach_onboarding_progress(db, user)
 
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(
@@ -167,7 +168,7 @@ def update_user(
     if updates.get("status") == "inactivo":
         pause_running_steps(db, user)
         db.commit()
-    return user
+    return attach_onboarding_progress(db, user)
 
 @router.patch("/{user_id}/password")
 def change_user_password(

@@ -76,6 +76,8 @@ export const api = {
   getDocuments: () => request<any[]>("/api/documents/"),
   deleteDocument: (id: string) =>
     request(`/api/documents/${id}`, { method: "DELETE" }),
+  retryDocument: (id: string) =>
+    request(`/api/documents/${id}/retry`, { method: "POST" }),
   uploadDocument: async (file: File, params: Record<string, any> = {}) => {
     const token = getToken();
     const fd = new FormData();

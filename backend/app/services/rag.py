@@ -270,7 +270,7 @@ def _normalize_ws(text: str) -> str:
 def build_rich_context(
     chunks: List[RetrievedChunk],
     doc_names: Optional[Dict[str, str]] = None,
-    max_total_chars: int = 12000,
+    max_total_chars: int = 40000,
 ) -> str:
     """Ensambla un contexto COMPLETO y legible para que el LLM reorganice las ideas.
 

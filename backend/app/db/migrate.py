@@ -46,6 +46,9 @@ COLUMNS = {
     "documents": {
         "primary_category": "VARCHAR",
         "target_role_ids": "TEXT",
+        "error_message": "TEXT",
+        "file_data": "BYTEA",
+        "manual_category": "VARCHAR",
     },
     "document_chunks": {
         "category": "VARCHAR",
@@ -86,6 +89,13 @@ COLUMNS = {
     },
 }
 
+# Columnas ELIMINADAS del modelo que conviene retirar de bases ya existentes.
+# En bases nuevas ni se crean (el modelo ya no las define); esto solo limpia las
+# antiguas de forma idempotente. tabla -> [columnas]
+DROPPED_COLUMNS = {
+    "users": ["onboarding_day", "onboarding_total_days"],  # el progreso se deriva de los planes
+}
+
 
 def run_migrations():
     inspector = inspect(engine)
@@ -99,3 +109,12 @@ def run_migrations():
             for col, ddl in cols.items():
                 if col not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+
+        # Retirar columnas obsoletas si aún existen (idempotente).
+        for table, cols in DROPPED_COLUMNS.items():
+            if table not in existing_tables:
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for col in cols:
+                if col in existing:
+                    conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {col}"))

@@ -84,8 +84,6 @@ def seed_data(db_session):
         hashed_password=hash_password("test123"),
         system_role="rrhh",
         status="activo",
-        onboarding_day=15,
-        onboarding_total_days=15,
     )
     user_emp = User(
         id="user-emp",
@@ -97,8 +95,6 @@ def seed_data(db_session):
         hashed_password=hash_password("test123"),
         system_role="empleado",
         status="onboarding",
-        onboarding_day=3,
-        onboarding_total_days=15,
         start_date="2026-03-01",
     )
     db_session.add_all([user_rrhh, user_emp])

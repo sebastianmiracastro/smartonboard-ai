@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FileText, Upload, Trash2, Shield, Users, Crown, Briefcase, Building2, X, Tag } from "lucide-react";
+import { FileText, Upload, Trash2, Shield, Users, Crown, Briefcase, Building2, X, Tag, RotateCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
@@ -81,6 +81,17 @@ export default function DocumentosPage() {
     catch (e: any) { toast.error(e.message || "No se pudo eliminar el documento"); }
   };
 
+  const retryDoc = async (id: string, name: string) => {
+    const tid = toast.loading(`Reprocesando “${name}”…`);
+    try {
+      await api.retryDocument(id);
+      setDocs((prev) => prev.map((d) => d.id === id ? { ...d, status: "en_cola", progress: 0, error_message: null } : d));
+      pollDocumentStatus(id, tid);
+    } catch (e: any) {
+      toast.update(tid, { type: "error", message: e.message || "No se pudo reprocesar el documento" });
+    }
+  };
+
   // Selección de archivo (por botón o arrastre) → abre el modal de parámetros
   const pickFile = (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase();
@@ -131,7 +142,7 @@ export default function DocumentosPage() {
             toast.update(tid, { type: "success", message: `“${doc.name}” indexado y listo` });
             clearInterval(interval);
           } else if (doc.status === "error") {
-            toast.update(tid, { type: "error", message: `Error al procesar “${doc.name}”` });
+            toast.update(tid, { type: "error", message: doc.error_message || `Error al procesar “${doc.name}”` });
             clearInterval(interval);
           }
         }
@@ -219,6 +230,9 @@ export default function DocumentosPage() {
                         <span className="text-amber-400 text-xs">{doc.progress}%</span>
                       </div>
                     ) : null}
+                    {doc.status === "error" && doc.error_message ? (
+                      <p className="mt-1.5 text-red-400 text-xs">{doc.error_message}</p>
+                    ) : null}
                   </div>
                   <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${acc.cls}`}>
                     <AccIcon size={11} /> {acc.label}
@@ -226,6 +240,11 @@ export default function DocumentosPage() {
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusConfig[doc.status]?.classes || statusConfig.en_cola.classes}`}>
                     {statusConfig[doc.status]?.label || doc.status}
                   </span>
+                  {doc.status === "error" && (
+                    <button onClick={() => retryDoc(doc.id, doc.name)} title="Reintentar procesamiento" className="text-slate-500 hover:text-indigo-400 transition-colors p-1.5 hover:bg-indigo-500/10 rounded-lg">
+                      <RotateCw size={14} />
+                    </button>
+                  )}
                   <button onClick={() => deleteDoc(doc.id)} className="text-slate-500 hover:text-red-400 transition-colors p-1.5 hover:bg-red-500/10 rounded-lg">
                     <Trash2 size={14} />
                   </button>

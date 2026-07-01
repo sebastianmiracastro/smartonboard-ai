@@ -155,7 +155,7 @@ def _answer_grounded(
     model: str = "gpt-4o-mini",
     temperature: float = 0.4,
     agent_name: str = "Sara",
-    max_tokens: int = 1500,
+    max_tokens: int = 3000,
 ) -> str:
     """Llamada al LLM para REDACTAR la respuesta a partir del contexto recuperado.
 
@@ -402,27 +402,37 @@ def _extractive_or_mock(question, ctx, extra_queries, grounding: str,
         )
         if synthesized:
             return synthesized
-    return generate_mock_answer(question, grounding)
+    # Sin material: distinguir 'aún no hay documentos' de 'no encontré sobre eso'.
+    return generate_mock_answer(question, grounding, has_any_docs=ctx.has_accessible_documents())
 
 
-def generate_mock_answer(question: str, context: str) -> str:
+def generate_mock_answer(question: str, context: str, has_any_docs: bool = True) -> str:
     """Respuesta sin LLM (modo demo, sin API key).
 
     Si hay contexto recuperado, lo presenta organizado (es información REAL de los
     documentos). Sin LLM no puede reorganizar las ideas, pero al menos muestra el
     material relevante completo en vez de un recorte. Si no hay contexto, NO inventa
-    políticas ni cifras: orienta a dónde buscar."""
+    políticas ni cifras: orienta a dónde buscar, distinguiendo si la empresa aún no
+    ha subido documentos o si simplemente no hubo coincidencias."""
     if context:
         # Limpiar los encabezados de documento y limitar a un tamaño legible,
         # cortando SIEMPRE en un final de oración (nunca a media palabra/frase).
         cleaned = context.replace("=== Documento:", "📄").replace("===", "").strip()
-        snippet = clip_to_sentences(cleaned, 1500)
+        snippet = clip_to_sentences(cleaned, 6000)
         return (
             "Esto es lo que encontré en la documentación de la empresa sobre tu "
             f"consulta:\n\n{snippet}\n\n"
             "💡 Para respuestas redactadas y completas (que unan toda esta información), "
             "configura la clave de IA en Configuración. ¿Quieres que te oriente en algún "
             "punto concreto?"
+        )
+    if not has_any_docs:
+        # La empresa todavía no tiene documentos accesibles para este perfil.
+        return (
+            "Todavía no hay documentos cargados para tu perfil, así que aún no puedo "
+            "consultar información de la empresa. En cuanto RR.HH. suba la documentación "
+            "(políticas, procesos, guías), podré responderte con base en ella. Mientras "
+            "tanto, puedo mostrarte tus tareas o contarte cómo funciona la plataforma."
         )
     return (
         "No encontré información específica sobre eso en los documentos disponibles "
@@ -468,6 +478,48 @@ def generate_title(
         return title[:60] if title else fallback
     except Exception:
         return fallback
+
+
+# ─── REFINAMIENTO BARATO (interviene la clave para pulir SIN cambiar datos) ───
+
+def refine_answer(
+    question: str,
+    draft: str,
+    api_key: Optional[str],
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.4,
+    agent_name: str = "Sara",
+    max_tokens: int = 220,
+) -> str:
+    """Con clave de IA, mejora SOLO LA REDACCIÓN de una respuesta ya correcta
+    (datos del perfil), para que suene natural y responda directo a la pregunta.
+
+    Es barato a propósito (pocos tokens de salida) y va con reglas estrictas:
+    NO cambia ni inventa datos, números, porcentajes, nombres ni fechas, y no añade
+    información. Ante cualquier fallo o sin clave, devuelve el borrador intacto: el
+    dato correcto nunca se pierde."""
+    if not api_key or not (draft or "").strip():
+        return draft
+    try:
+        name = (agent_name or "Sara").strip() or "Sara"
+        llm = ChatOpenAI(
+            model=model, temperature=min(temperature, 0.3),
+            openai_api_key=api_key, max_tokens=max_tokens,
+        )
+        messages = [
+            SystemMessage(content=(
+                f"Eres {name}, asistente de onboarding. Reescribe la RESPUESTA para que suene "
+                "natural, cálida y responda directo a la pregunta, en español. REGLAS ESTRICTAS: "
+                "conserva EXACTAMENTE todos los datos, números, porcentajes, nombres y fechas; no "
+                "inventes ni agregues información; no incluyas nada que no esté en la respuesta; sé "
+                "breve (máx. 3 frases). Si ya está bien, cámbiala apenas."
+            )),
+            HumanMessage(content=f"Pregunta: {question}\nRespuesta: {draft}"),
+        ]
+        out = (llm.invoke(messages).content or "").strip()
+        return out or draft
+    except Exception:
+        return draft
 
 
 # ─── FUNCIÓN PRINCIPAL ───────────────────────────────────────────────────────
@@ -528,6 +580,11 @@ def run_agent(
         # Datos del propio perfil en la plataforma (plan, comprensión, documentos):
         # salen de la BD; no requieren LLM ni RAG.
         answer = ctx.consultar_mi_perfil(rq)
+        # Con clave, la IA pule la redacción (sin tocar datos). Se omite en el
+        # subtema "documentos" porque es una LISTA y un reescrito la dañaría.
+        if api_key and profile_topic(rq) != "documentos":
+            answer = refine_answer(question, answer, api_key, model=ai_model,
+                                   temperature=ai_temperature, agent_name=agent_name)
     elif intent == "plataforma":
         # Auto-conocimiento del producto: se responde con la base nativa de la
         # plataforma (con clave redacta el LLM; sin clave, respuesta curada offline).

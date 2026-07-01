@@ -412,8 +412,16 @@ export default function DashboardPage() {
               </div>
 
               <div className="col-span-2">
-                <p className="text-slate-300 text-sm">Día {emp.onboarding_day}</p>
-                <p className="text-slate-500 text-xs">de {emp.onboarding_total_days}</p>
+                {emp.onboarding_state === "sin_plan" ? (
+                  <p className="text-slate-500 text-xs">Sin plan</p>
+                ) : (
+                  <>
+                    <p className="text-slate-300 text-sm">{emp.onboarding_progress ?? 0}%</p>
+                    <p className="text-slate-500 text-xs">
+                      {emp.onboarding_state === "completado" ? "completado" : "onboarding"}
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="col-span-1 flex justify-end">

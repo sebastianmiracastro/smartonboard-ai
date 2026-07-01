@@ -5,10 +5,10 @@ import json
 
 from app.services.tagging import CATEGORIES
 from app.db.database import get_db, SessionLocal
-from app.models.models import Document, User, Company, Role, Department
+from app.models.models import Document, DocumentChunk, User, Company, Role, Department
 from app.schemas.schemas import DocumentOut
 from app.core.dependencies import get_current_user, require_rrhh
-from app.services.document_processor import extract_text, chunk_text
+from app.services.document_processor import extract_text, chunk_text, is_pdf_encrypted
 from app.services.embeddings import generate_embeddings_batch
 from app.services.rag import index_document_chunks
 from app.services.tagging import tag_document
@@ -29,11 +29,24 @@ def process_document_background(
             return
         doc.status = "procesando"
         doc.progress = 10
+        doc.error_message = None
         db.commit()
 
         text = extract_text(file_bytes, file_format)
         if not text.strip():
             doc.status = "error"
+            if file_format == "pdf" and is_pdf_encrypted(file_bytes):
+                doc.error_message = (
+                    "El PDF está protegido con contraseña, no puedo leer su contenido. "
+                    "Quítale la protección y vuelve a subirlo."
+                )
+            elif file_format == "pdf":
+                doc.error_message = (
+                    "No pude extraer texto del PDF ni siquiera con OCR. Revisa que no esté "
+                    "dañado o que la imagen tenga suficiente calidad para reconocer el texto."
+                )
+            else:
+                doc.error_message = "No se pudo extraer texto del documento. Revisa que el archivo no esté vacío o dañado."
             db.commit()
             return
 
@@ -43,6 +56,7 @@ def process_document_background(
         chunks = chunk_text(text)  # contextos coherentes (parámetros por defecto)
         if not chunks:
             doc.status = "error"
+            doc.error_message = "El documento no tiene contenido suficiente para indexar."
             db.commit()
             return
 
@@ -106,6 +120,7 @@ def process_document_background(
             doc = db.query(Document).filter(Document.id == document_id).first()
             if doc:
                 doc.status = "error"
+                doc.error_message = "Ocurrió un error al procesar el documento. Intenta subirlo de nuevo."
                 db.commit()
         except Exception:
             pass
@@ -191,6 +206,8 @@ async def upload_document(
         role_permission=role_permission,
         dept_permission=dept_permission,
         min_seniority=min_seniority,
+        file_data=file_bytes,        # se guarda para poder reprocesar
+        manual_category=category,    # categoría elegida (o None = auto)
     )
     db.add(doc)
     db.commit()
@@ -212,15 +229,58 @@ async def upload_document(
         "nombre": doc.name
     }
 
+@router.post("/{doc_id}/retry")
+def retry_document(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_rrhh),
+):
+    """Reprocesa un documento (útil si quedó en 'error' por un fallo transitorio).
+    Reutiliza el archivo original guardado; no hace falta volver a subirlo."""
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.company_id == current_user.company_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    if not doc.file_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Este documento no tiene el archivo guardado; súbelo de nuevo.",
+        )
+
+    # Reiniciar estado y relanzar el procesamiento en segundo plano.
+    doc.status = "en_cola"
+    doc.progress = 0
+    doc.error_message = None
+    db.commit()
+
+    background_tasks.add_task(
+        process_document_background,
+        doc.id,
+        doc.company_id,
+        bytes(doc.file_data),
+        doc.format,
+        doc.manual_category,
+    )
+    return {"mensaje": "Reprocesando el documento", "id": doc.id}
+
+
 @router.delete("/{doc_id}")
 def delete_document(
     doc_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_rrhh)
 ):
-    doc = db.query(Document).filter(Document.id == doc_id).first()
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.company_id == current_user.company_id,
+    ).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
+    # Borrar primero los chunks indexados (evita violación de FK y fragmentos huérfanos)
+    db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).delete()
     db.delete(doc)
     db.commit()
     return {"mensaje": "Documento eliminado"}

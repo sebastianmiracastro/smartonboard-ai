@@ -4,6 +4,7 @@ from app.db.database import get_db
 from app.models.models import User
 from app.schemas.schemas import UserLogin, UserCreate, UserOut, Token
 from app.core.security import verify_password, hash_password, create_access_token
+from app.services.onboarding import attach_onboarding_progress
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación"])
 
@@ -34,10 +35,9 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         role_id=data.role_id,
         system_role=data.system_role,
         start_date=data.start_date,
-        onboarding_total_days=data.onboarding_total_days,
         company_id="comp-001",
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    return attach_onboarding_progress(db, user)

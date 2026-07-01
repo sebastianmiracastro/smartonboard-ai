@@ -112,9 +112,14 @@ export default function EmpleadoDetailPage() {
     <div className="text-slate-400 text-sm">Empleado no encontrado.</div>
   );
 
-  const progress = employee.onboarding_total_days > 0
-    ? Math.round((employee.onboarding_day / employee.onboarding_total_days) * 100)
-    : 0;
+  // Progreso derivado de los planes asignados (fuente única del backend).
+  const progress = employee.onboarding_progress ?? 0;
+  const onbState = employee.onboarding_state ?? "sin_plan";
+  const onbLabel = onbState === "completado"
+    ? "Completado"
+    : onbState === "onboarding"
+      ? `${employee.onboarding_steps_done ?? 0} de ${employee.onboarding_steps_total ?? 0} pasos`
+      : "Sin plan asignado";
 
   const initials = employee.full_name
     .split(" ")
@@ -176,7 +181,7 @@ export default function EmpleadoDetailPage() {
       <div className="bg-[#161e33] border border-[#2a3354] rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-white font-medium">Progreso de onboarding</p>
-          <span className="text-slate-400 text-sm">Día {employee.onboarding_day} de {employee.onboarding_total_days}</span>
+          <span className="text-slate-400 text-sm">{onbLabel}</span>
         </div>
         <div className="h-2 bg-[#2a3354] rounded-full overflow-hidden">
           <div

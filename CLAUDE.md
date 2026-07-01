@@ -140,16 +140,22 @@ El agente filtra los chunks ANTES de buscar — no es lógica en el LLM sino en 
 ## Pipeline RAG completo
 
 PDF/DOCX/TXT
-↓ extract_text() — pypdf, python-docx
-↓ chunk_text() — ventana 500 chars, overlap 50
+↓ extract_text() — extracción SÓLIDA
+    · PDF: PyMuPDF para la capa de texto; páginas escaneadas → OCR completo con
+      Tesseract (spa+eng); páginas con imágenes/diagramas y poco texto → OCR que se
+      FUSIONA con la capa de texto (captura el texto dentro de imágenes). Fallback a
+      pypdf si PyMuPDF no está. Requiere tesseract-ocr + tesseract-ocr-spa (Dockerfile).
+    · DOCX: extrae párrafos Y tablas en orden (fila = "celda | celda | …")
+    · PDF: quita encabezados/pies y numeración repetidos (_strip_boilerplate)
+    · Si tras todo (incl. OCR) no hay texto → status "error" + error_message en la UI
+↓ chunk_text() — párrafos de ~1000 chars, solape 180 (subdivide por oraciones)
 ↓ generate_embeddings_batch() — all-MiniLM-L6-v2
 ↓ index_document_chunks() — guarda en document_chunks con embedding JSON
 Pregunta del empleado
-↓ generate_embedding() — mismo modelo
-↓ search_similar_chunks() — cosine_similarity contra todos los chunks
-↓ build_context() — top 5 chunks más similares
-↓ LangGraph agent — ReAct: retrieve → classify → answer
-↓ Respuesta con fuentes
+↓ deep_retrieve() — multi-consulta + vecinos, mejor similitud por chunk
+↓ build_rich_context() — agrupa por documento, ordena por índice, deduplica
+↓ agente: acción (BD) / plataforma / perfil / social / informativa (RAG)
+↓ Con clave: LLM redacta; sin clave: sintetizador extractivo (extractive.py)
 
 ---
 
@@ -189,6 +195,15 @@ Orden de prioridad (la primera que coincide gana):
 La **comprensión** (`comprehension_score`) SOLO se calcula en la intención
 `informativa`; saludos y consultas de plataforma/perfil/tareas guardan `None` para
 no contaminar las métricas de conocimiento que ve RR.HH.
+
+**Con vs. sin clave de IA de la empresa (ambos modos son de primera):**
+- CON clave: la IA redacta lo informativo (RAG, `_answer_grounded`), lo de
+  plataforma, y PULE la redacción del perfil en prosa (`refine_answer`, barato y
+  con reglas estrictas: no cambia datos/números/nombres; se OMITE en la lista de
+  documentos). Preguntas de perfil y de documentos: respondidas.
+- SIN clave: perfil y tareas se responden desde la BD; lo informativo lo arma el
+  sintetizador extractivo (`extractive.py`); plataforma con la base curada. Nada se
+  queda sin responder. Ver tests en `tests/test_ai_key.py` (LLM mockeado).
 
 **Plataforma vs. empresa (precedencia):** las preguntas claramente del producto
 (nombre, "esta plataforma", "qué modelo usas") van directo al KB. Las ambiguas

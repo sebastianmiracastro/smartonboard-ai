@@ -3,21 +3,22 @@
 Es la "IA de la casa" que responde cuando la empresa NO ha configurado una clave de
 IA. En vez de devolver un recorte crudo, construye una respuesta RICA y coherente:
 
-  1. Parte los fragmentos recuperados (de varios documentos) en oraciones.
+  1. Parte los fragmentos por LÍNEAS (los ítems de lista/pasos quedan intactos) y
+     solo la prosa se sub-divide en oraciones.
   2. Embebe cada oración con el MISMO modelo del RAG (all-MiniLM-L6-v2) — gratis y
-     offline — y la puntúa contra la pregunta y todas sus reformulaciones,
-     quedándose con la mejor similitud (la oración que responde a cualquier ángulo
-     cuenta).
-  3. Selecciona las oraciones más pertinentes (umbral + tope generoso), deduplica el
-     solape entre fragmentos y las REORDENA por documento y posición original para
-     que el texto se lea de corrido, no como piezas sueltas.
-  4. Ensambla la respuesta agrupando oraciones contiguas en párrafos.
+     offline — y la puntúa contra la pregunta y todas sus reformulaciones (mejor sim).
+  3. Filtra por pasaje relevante (chunk-gating) y arma un pool de oraciones
+     pertinentes; en un pasaje relevante conserva la enumeración COMPLETA de pasos.
+  4. Selecciona con MMR (relevancia + diversidad): las más pertinentes pero SIN
+     repetir la misma idea cuando varios documentos la mencionan.
+  5. Reordena por pasaje/posición y ensambla, PRESERVANDO las listas como viñetas.
 
 Es extractivo (no inventa: toda frase proviene de los documentos), lo que lo hace
 fiable y defendible. Cuando sí hay clave de IA, este mismo material recuperado se le
 pasa al LLM para una redacción abstractiva; el extractivo es el piso de calidad que
 garantiza que SIEMPRE haya una respuesta fundamentada.
 """
+import random
 import re
 from typing import List, Optional
 
@@ -29,6 +30,8 @@ from app.services.rag import RetrievedChunk
 # línea / viñetas (listas). No parte abreviaturas comunes a propósito por simplicidad.
 _SENT_SPLIT = re.compile(r"(?<=[\.\!\?\:\;])\s+|\n+")
 _BULLET = re.compile(r"^\s*([\-•\*]|\d+[\.\)])\s+")
+# Sub-división de una LÍNEA de prosa en oraciones (solo tras . ! ?, no listas).
+_WITHIN_LINE = re.compile(r"(?<=[\.\!\?])\s+")
 
 
 def _split_sentences(text: str) -> List[str]:
@@ -54,15 +57,16 @@ def _norm(sentence: str) -> str:
 DEFAULT_SENTENCE_THRESHOLD = 0.35
 
 # Fracción de la MEJOR similitud por debajo de la cual una oración se descarta.
-# Es un umbral RELATIVO: solo se conservan oraciones cercanas a la más pertinente,
-# para que la respuesta tenga foco y no se diluya con frases apenas relacionadas.
-RELATIVE_KEEP_RATIO = 0.72
+# Es un umbral RELATIVO. Se busca una respuesta RICA: se conservan las oraciones
+# razonablemente pertinentes (no solo las cercanísimas a la mejor). El umbral base
+# (min_similarity) + el MMR (sin redundancia) evitan el ruido y la repetición.
+RELATIVE_KEEP_RATIO = 0.62
 
-# Igual, pero a nivel de CHUNK (pasaje). El score de un chunk —su mejor oración— es
-# una señal más fiable que una oración suelta, así que se descartan enteros los
-# pasajes poco relevantes; así se evita pegar frases sueltas de contextos distintos
-# (el efecto "Frankenstein" que hacía las respuestas incoherentes).
-CHUNK_KEEP_RATIO = 0.85
+# Igual, pero a nivel de CHUNK (pasaje). Se prioriza la RIQUEZA: se incluyen todos
+# los pasajes razonablemente pertinentes que el RAG ya recuperó (proceso + cantidad
+# + acumulación de un mismo tema). El filtro fino DENTRO del pasaje (RELATIVE) evita
+# meter frases sueltas ajenas; el umbral base descarta lo claramente irrelevante.
+CHUNK_KEEP_RATIO = 0.6
 
 
 def clip_to_sentences(text: str, max_chars: int = 1500) -> str:
@@ -79,11 +83,49 @@ def clip_to_sentences(text: str, max_chars: int = 1500) -> str:
     return window.rsplit(" ", 1)[0].rstrip() + "…"
 
 
+# Peso relevancia↔diversidad del MMR (0.72 = prioriza responder, pero sin repetir).
+MMR_LAMBDA = 0.72
+# Por encima de esta similitud entre dos oraciones, se consideran la MISMA idea.
+DUPLICATE_THRESHOLD = 0.9
+
+
+def _mmr_select(pool: List[int], sim_by_i: dict, embeddings: list,
+                k: int, lambda_: float = MMR_LAMBDA) -> List[int]:
+    """Selección por Relevancia Marginal Máxima (MMR): elige las oraciones más
+    pertinentes PERO diversas entre sí, descartando las casi idénticas. Evita que la
+    respuesta repita la misma idea cuando varios documentos la mencionan."""
+    pool = sorted(pool, key=lambda i: sim_by_i[i], reverse=True)
+    selected = [pool.pop(0)]
+    while pool and len(selected) < k:
+        best_i, best_score = None, None
+        for i in pool:
+            redundancy = max(cosine_similarity(embeddings[i], embeddings[j]) for j in selected)
+            if redundancy >= DUPLICATE_THRESHOLD:
+                continue  # casi idéntica a una ya elegida → no aporta
+            score = lambda_ * sim_by_i[i] - (1 - lambda_) * redundancy
+            if best_score is None or score > best_score:
+                best_i, best_score = i, score
+        if best_i is None:
+            break  # lo que queda es todo redundante
+        selected.append(best_i)
+        pool.remove(best_i)
+    return selected
+
+
+def _render_group(group: List[int], sentences: List[str], is_list: List[bool]) -> str:
+    """Ensambla un grupo de oraciones contiguas. Si NINGUNA venía como lista, se une
+    en un párrafo. Si hay pasos/viñetas, se respeta la estructura: la prosa como
+    líneas y los ítems de lista con viñeta (no un párrafo corrido)."""
+    if not any(is_list[i] for i in group):
+        return " ".join(sentences[i] for i in group)
+    return "\n".join(f"• {sentences[i]}" if is_list[i] else sentences[i] for i in group)
+
+
 def synthesize_answer(
     question: str,
     chunks: List[RetrievedChunk],
     extra_queries: Optional[List[str]] = None,
-    max_sentences: int = 16,
+    max_sentences: int = 24,
     min_similarity: float = DEFAULT_SENTENCE_THRESHOLD,
 ) -> str:
     """Construye una respuesta extractiva rica a partir de los fragmentos recuperados.
@@ -92,95 +134,121 @@ def synthesize_answer(
     if not chunks:
         return ""
 
-    # 1) Oraciones con su procedencia (para reordenar y agrupar después)
-    candidates: List[tuple] = []  # (sent, norm, origin)
+    # 1) Oraciones con su procedencia y si venían como ítem de lista/paso.
+    #    Se divide por LÍNEAS (los ítems de lista quedan intactos) y solo la PROSA se
+    #    sub-divide en oraciones. Así un "1. Escribe…" no se parte en "1." + "Escribe…".
+    candidates: List[tuple] = []  # (sent, norm, origin, is_list)
     for ch in chunks:
-        for pos, sent in enumerate(_split_sentences(ch.content)):
-            norm = _norm(sent)
-            if norm:
-                candidates.append((sent, norm, (ch.document_id, ch.chunk_index, pos)))
+        pos = 0
+        for line in (ch.content or "").split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            was_list = bool(_BULLET.match(line))
+            if was_list:
+                units = [_BULLET.sub("", line).strip()]
+            else:
+                units = [re.sub(r"\s+", " ", u).strip() for u in _WITHIN_LINE.split(line)]
+            for s in units:
+                # Los pasos suelen ser cortos: se permite menos longitud si era lista.
+                if len(s) < (12 if was_list else 22):
+                    continue
+                norm = _norm(s)
+                if norm:
+                    candidates.append((s, norm, (ch.document_id, ch.chunk_index, pos), was_list))
+                    pos += 1
 
-    # Deduplicación por CONTENCIÓN: el solape entre fragmentos produce trozos que son
-    # subcadena de una oración más larga. Procesando de mayor a menor longitud, se
-    # descarta todo lo que ya esté contenido en una oración conservada.
+    # Deduplicación por CONTENCIÓN (solape entre fragmentos): descarta lo que ya está
+    # contenido en una oración más larga conservada.
     candidates.sort(key=lambda c: len(c[1]), reverse=True)
     sentences: List[str] = []
     origin: List[tuple] = []
+    is_list: List[bool] = []
     kept_norms: List[str] = []
-    for sent, norm, org in candidates:
+    for sent, norm, org, was_list in candidates:
         if any(norm in k for k in kept_norms):
             continue
         kept_norms.append(norm)
         sentences.append(sent)
         origin.append(org)
+        is_list.append(was_list)
 
     if not sentences:
         return ""
 
-    # 2) Puntuar cada oración contra la pregunta y sus reformulaciones (mejor sim)
+    # 2) Puntuar cada oración contra la pregunta y sus reformulaciones (mejor sim).
     queries = [question] + [q for q in (extra_queries or []) if q and q.strip()]
     query_embeddings = [generate_embedding(q) for q in queries]
     sent_embeddings = generate_embeddings_batch(sentences)
 
-    scored = []
-    for i, emb in enumerate(sent_embeddings):
-        sim = max(cosine_similarity(qe, emb) for qe in query_embeddings)
-        scored.append((sim, i))
-    scored.sort(reverse=True)
-
+    scored = sorted(
+        ((max(cosine_similarity(qe, emb) for qe in query_embeddings), i)
+         for i, emb in enumerate(sent_embeddings)),
+        reverse=True,
+    )
     best = scored[0][0]
     if best < min_similarity:
         # Ninguna oración es realmente pertinente: el llamador dará la respuesta honesta.
         return ""
-
-    # 3) Filtrado por CHUNK: se puntúa cada pasaje por su mejor oración y se conservan
-    #    solo los pasajes cercanos al mejor. Así no se cuelan frases sueltas de
-    #    contextos poco relevantes (evita el efecto "Frankenstein").
     sim_by_i = {i: sim for sim, i in scored}
-    chunk_best = {}
+
+    # 3) Filtrado por CHUNK: se conservan solo los pasajes cercanos al mejor (evita
+    #    frases sueltas de contextos poco relevantes → el efecto "Frankenstein").
+    chunk_best: dict = {}
     for sim, i in scored:
-        key = (origin[i][0], origin[i][1])  # (document_id, chunk_index)
-        if sim > chunk_best.get(key, -1.0):
-            chunk_best[key] = sim
+        key = (origin[i][0], origin[i][1])
+        chunk_best[key] = max(chunk_best.get(key, -1.0), sim)
     overall_best = max(chunk_best.values())
     chunk_cutoff = max(min_similarity, overall_best * CHUNK_KEEP_RATIO)
     kept_chunks = {k for k, s in chunk_best.items() if s >= chunk_cutoff}
 
-    # 4) Dentro de esos pasajes, conserva las oraciones pertinentes (umbral relativo
-    #    a la mejor) en su ORDEN original, para que cada pasaje se lea de corrido.
+    # 4) Pool de oraciones pertinentes (umbral relativo a la mejor) dentro de esos pasajes.
     sent_cutoff = max(min_similarity, overall_best * RELATIVE_KEEP_RATIO)
-    relevant = [
+    pool = [
         i for i in range(len(sentences))
-        if (origin[i][0], origin[i][1]) in kept_chunks and sim_by_i[i] >= sent_cutoff
+        if (origin[i][0], origin[i][1]) in kept_chunks
+        # En un pasaje relevante se conservan TODOS los ítems de lista/pasos (una
+        # enumeración se responde completa); la prosa sí pasa el umbral relativo.
+        and (is_list[i] or sim_by_i[i] >= sent_cutoff)
     ]
-    if not relevant:
+    if not pool:
         return ""
-    relevant = relevant[:max_sentences]
 
-    # Reordena: pasaje más relevante primero, luego el orden natural del texto.
+    # 4b) MMR: quedarse con las más pertinentes PERO diversas (sin repetir la idea).
+    selected = _mmr_select(pool, sim_by_i, sent_embeddings, k=max_sentences)
+
+    # 5) Reordenar (pasaje más relevante primero, luego orden natural) y ensamblar,
+    #    preservando las listas/pasos como viñetas.
     ordered = sorted(
-        relevant,
+        selected,
         key=lambda i: (-chunk_best[(origin[i][0], origin[i][1])],
                        origin[i][0], origin[i][1], origin[i][2]),
     )
-
-    # 5) Agrupar oraciones contiguas (mismo doc, índices cercanos) en párrafos
     paragraphs: List[str] = []
-    current: List[str] = []
+    group: List[int] = []
     prev = None
     for i in ordered:
         d, ci, _ = origin[i]
         if prev is not None and (d != prev[0] or abs(ci - prev[1]) > 1):
-            paragraphs.append(" ".join(current))
-            current = []
-        current.append(sentences[i])
+            paragraphs.append(_render_group(group, sentences, is_list))
+            group = []
+        group.append(i)
         prev = (d, ci)
-    if current:
-        paragraphs.append(" ".join(current))
+    if group:
+        paragraphs.append(_render_group(group, sentences, is_list))
 
     body = "\n\n".join(paragraphs)
-    return (
-        "Esto es lo que dice la documentación de la empresa sobre tu consulta:\n\n"
-        f"{body}\n\n"
-        "¿Quieres que profundice en algún punto en concreto?"
-    )
+    return f"{random.choice(_INTROS)}\n\n{body}\n\n{random.choice(_CLOSINGS)}"
+
+
+# Intros/cierres variados para que la respuesta extractiva no suene repetitiva.
+_INTROS = [
+    "Esto es lo que dice la documentación de la empresa sobre tu consulta:",
+    "Encontré esto en los documentos de la empresa:",
+    "Según la documentación disponible para tu perfil:",
+]
+_CLOSINGS = [
+    "¿Quieres que profundice en algún punto en concreto?",
+    "Si necesitas más detalle sobre algo puntual, dímelo.",
+    "¿Te sirve, o busco algo más específico?",
+]

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Integer, Float, ForeignKey, Text, DateTime
+from sqlalchemy import Column, String, Boolean, Integer, Float, ForeignKey, Text, DateTime, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -63,8 +63,8 @@ class User(Base):
     system_role = Column(String, default="empleado")
     status = Column(String, default="onboarding")
     start_date = Column(String)
-    onboarding_day = Column(Integer, default=1)
-    onboarding_total_days = Column(Integer, default=15)
+    # El progreso de onboarding se deriva de los planes asignados (ver
+    # services/onboarding.compute_onboarding_progress); no se guarda en el usuario.
     onboarding_plan_id = Column(String, ForeignKey("onboarding_plans.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -103,6 +103,9 @@ class Document(Base):
     status = Column(String, default="en_cola")
     progress = Column(Integer, default=0)
     chunk_count = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)         # motivo legible si el procesamiento falla
+    file_data = Column(LargeBinary, nullable=True)      # bytes del archivo original (para reprocesar)
+    manual_category = Column(String, nullable=True)     # categoría elegida por RR.HH. al subir (para reprocesar)
     uploaded_by = Column(String, ForeignKey("users.id"))
     uploaded_at = Column(DateTime, server_default=func.now())
     dept_permission = Column(String, nullable=True)

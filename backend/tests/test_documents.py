@@ -1,4 +1,4 @@
-from app.models.models import Document
+from app.models.models import Document, DocumentChunk
 from tests.conftest import get_token
 
 
@@ -70,6 +70,53 @@ def test_rrhh_ve_todos_los_documentos(client, seed_data, db_session):
     assert "doc-rrhh" in ids
     # RR.HH. no ve doc de gerencia (require_gerencia=True)
     assert "doc-ger" not in ids
+
+
+def test_delete_documento_borra_sus_chunks(client, seed_data, db_session):
+    db_session.add(Document(id="doc-del", company_id="comp-test", name="Borrable",
+                            status="indexado", uploaded_by="user-rrhh"))
+    db_session.add(DocumentChunk(document_id="doc-del", company_id="comp-test",
+                                 content="fragmento", chunk_index=0))
+    db_session.commit()
+
+    token = get_token(client, "andrea@test.co", "test123")
+    resp = client.delete("/api/documents/doc-del", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    assert db_session.query(DocumentChunk).filter_by(document_id="doc-del").count() == 0
+    assert db_session.query(Document).filter_by(id="doc-del").count() == 0
+
+
+def test_retry_reinicia_estado_y_acepta(client, seed_data, db_session):
+    db_session.add(Document(
+        id="doc-retry", company_id="comp-test", name="guia.txt", format="txt",
+        status="error", error_message="fallo transitorio", uploaded_by="user-rrhh",
+        file_data=b"Contenido de prueba con texto suficiente para poder indexarlo.",
+    ))
+    db_session.commit()
+
+    token = get_token(client, "andrea@test.co", "test123")
+    resp = client.post("/api/documents/doc-retry/retry",
+                       headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    doc = db_session.query(Document).filter_by(id="doc-retry").first()
+    assert doc.status == "en_cola"
+    assert doc.error_message is None
+
+
+def test_retry_sin_archivo_guardado_da_400(client, seed_data, db_session):
+    db_session.add(Document(id="doc-nofile", company_id="comp-test", name="x", status="error",
+                            uploaded_by="user-rrhh"))
+    db_session.commit()
+    token = get_token(client, "andrea@test.co", "test123")
+    resp = client.post("/api/documents/doc-nofile/retry",
+                       headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 400
+
+
+def test_retry_solo_rrhh(client, seed_data):
+    token = get_token(client, "carlos@test.co", "test123")
+    resp = client.post("/api/documents/x/retry", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 403
 
 
 def test_upload_documento_solo_rrhh(client, seed_data):

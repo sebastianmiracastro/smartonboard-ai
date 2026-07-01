@@ -80,7 +80,9 @@ pydantic_core==2.41.5
 pydantic==2.12.5
 pydantic-settings==2.13.1
 Pygments==2.20.0
+PyMuPDF==1.28.0
 pypdf==6.11.0
+pytesseract==0.3.13
 python-dateutil==2.9.0.post0
 python-docx==1.2.0
 python-dotenv==1.2.2

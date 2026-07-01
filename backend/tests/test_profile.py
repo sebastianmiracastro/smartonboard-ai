@@ -172,6 +172,23 @@ def test_pregunta_de_plataforma_responde_desde_kb(client, seed_data, db_session)
     assert "onboarding" in msg["content"].lower()
 
 
+def test_offline_sin_documentos_avisa_que_no_hay(client, seed_data, db_session):
+    # seed_data no tiene documentos → una pregunta informativa debe avisar que aún
+    # no hay documentos cargados (no el genérico 'no encontré sobre eso').
+    token = get_token(client, "carlos@test.co", "test123")
+    msg = _send(client, token, _conv(client, token),
+                "¿cuál es la política de reembolsos de gastos de viaje?")
+    assert "no hay documentos cargados" in msg["content"].lower()
+
+
+def test_offline_mensajes_distinguen_estado():
+    from app.services.agent import generate_mock_answer
+    sin = generate_mock_answer("x", "", has_any_docs=False).lower()
+    con = generate_mock_answer("x", "", has_any_docs=True).lower()
+    assert "no hay documentos cargados" in sin
+    assert "no encontré información específica" in con
+
+
 def test_pregunta_integracion_jira(client, seed_data, db_session):
     token = get_token(client, "carlos@test.co", "test123")
     msg = _send(client, token, _conv(client, token), "¿SmartOnboard se integra con Jira?")

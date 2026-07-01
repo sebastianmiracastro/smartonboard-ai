@@ -152,8 +152,8 @@ class ToolContext:
         self._mark(TOOL_BUSCAR)
         # Consultas a lanzar: la original + sus reformulaciones (si las hay)
         all_queries = [consulta] + [q for q in (queries or []) if q and q.strip()]
-        # Profundidad de la búsqueda: generosa por diseño (completitud > tokens)
-        max_chunks = max(12, self.rag_top_k * 4)
+        # Profundidad de la búsqueda: MUY generosa (completitud/riqueza > tokens).
+        max_chunks = max(24, self.rag_top_k * 6)
         chunks = deep_retrieve(
             db=self.db,
             company_id=self.company_id,
@@ -164,7 +164,7 @@ class ToolContext:
             user_department_id=self.user_department_id,
             user_role_id=self.user_role_id,
             max_chunks=max_chunks,
-            neighbor_radius=1,
+            neighbor_radius=2,   # más contexto continuo alrededor de cada coincidencia
             prefer_category=categorize(consulta),  # prioriza el tema de la pregunta
         )
         # Guardar los fragmentos para el sintetizador extractivo (camino sin clave de IA)
@@ -191,6 +191,15 @@ class ToolContext:
                 self.sources.append(src)
 
         return build_rich_context(chunks, doc_names=doc_names)
+
+    def has_accessible_documents(self) -> bool:
+        """¿El usuario tiene ALGÚN documento indexado accesible para su perfil?
+        Sirve para distinguir 'aún no hay documentos' de 'no encontré sobre eso'."""
+        from app.services.rag import accessible_document_ids
+        return bool(accessible_document_ids(
+            self.db, self.company_id, self.user_is_rrhh, self.user_is_gerencia,
+            self.user_seniority_level, self.user_department_id, self.user_role_id,
+        ))
 
     def _lost_plan_ids(self) -> set:
         """Ids de planes 'perdidos' del empleado (sus pasos ya no cuentan)."""
@@ -357,11 +366,16 @@ class ToolContext:
             partes.append(f"área {user.department_name}")
         estado = {"onboarding": "en onboarding", "activo": "activo"}.get(user.status, user.status)
         msg = ", ".join(partes) + f". Estado: {estado}."
-        if user.status == "onboarding" and user.onboarding_total_days:
-            msg += (
-                f" Vas en el día {user.onboarding_day} de {user.onboarding_total_days} "
-                "de tu incorporación."
-            )
+        # Progreso real derivado de los planes asignados (no de días fijos).
+        from app.services.onboarding import compute_onboarding_progress
+        prog = compute_onboarding_progress(self.db, user)
+        if prog["state"] == "onboarding":
+            msg += (f" Llevas un {prog['percent']}% de tu onboarding "
+                    f"({prog['steps_done']} de {prog['steps_total']} pasos completados).")
+        elif prog["state"] == "completado":
+            msg += " ¡Ya completaste tu onboarding! 🎉"
+        else:
+            msg += " Aún no tienes un plan de onboarding asignado."
         return msg
 
     def completar_tarea(self, titulo: str) -> str:

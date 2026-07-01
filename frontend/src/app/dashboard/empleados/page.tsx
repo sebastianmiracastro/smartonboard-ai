@@ -37,7 +37,6 @@ const emptyForm = {
   system_role: "empleado",
   status: "onboarding",
   start_date: "",
-  onboarding_total_days: 15,
   // Datos de RR.HH.
   document_id: "",
   gender: "",
@@ -161,7 +160,6 @@ export default function EmpleadosPage() {
       system_role: emp.system_role ?? "empleado",
       status: emp.status ?? "onboarding",
       start_date: emp.start_date ?? "",
-      onboarding_total_days: emp.onboarding_total_days ?? 15,
       document_id: emp.document_id ?? "",
       gender: emp.gender ?? "",
       birth_date: emp.birth_date ?? "",
@@ -197,7 +195,6 @@ export default function EmpleadosPage() {
       role_id: form.role_id || null,
       system_role: form.system_role,
       start_date: form.start_date || null,
-      onboarding_total_days: Number(form.onboarding_total_days) || 15,
       document_id: form.document_id || null,
       gender: form.gender || null,
       birth_date: form.birth_date || null,
@@ -336,22 +333,20 @@ export default function EmpleadosPage() {
               </div>
 
               <div className="col-span-2">
-                {emp.status === "onboarding" ? (
+                {emp.onboarding_state === "onboarding" ? (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-[#2a3354] rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full bg-indigo-500"
-                        style={{
-                          width: `${Math.round((emp.onboarding_day / emp.onboarding_total_days) * 100)}%`
-                        }}
+                        style={{ width: `${emp.onboarding_progress ?? 0}%` }}
                       />
                     </div>
-                    <span className="text-slate-400 text-xs">
-                      {Math.round((emp.onboarding_day / emp.onboarding_total_days) * 100)}%
-                    </span>
+                    <span className="text-slate-400 text-xs">{emp.onboarding_progress ?? 0}%</span>
                   </div>
+                ) : emp.onboarding_state === "completado" ? (
+                  <span className="text-emerald-400 text-xs">Completado</span>
                 ) : (
-                  <span className="text-slate-500 text-xs">Completado</span>
+                  <span className="text-slate-500 text-xs">Sin plan</span>
                 )}
               </div>
 
@@ -527,16 +522,6 @@ export default function EmpleadosPage() {
                     type="date"
                     value={form.start_date}
                     onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                    className={inputCls}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Días onboarding</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.onboarding_total_days}
-                    onChange={(e) => setForm({ ...form, onboarding_total_days: Number(e.target.value) })}
                     className={inputCls}
                   />
                 </div>

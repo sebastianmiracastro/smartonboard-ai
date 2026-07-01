@@ -27,9 +27,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     .join("")
     .slice(0, 2) ?? "—";
 
-  const progress = user && user.onboarding_total_days > 0
-    ? Math.round((user.onboarding_day / user.onboarding_total_days) * 100)
-    : 0;
+  // Progreso derivado de los planes asignados (fuente única del backend).
+  const progress = user?.onboarding_progress ?? 0;
+  const onbState = user?.onboarding_state ?? "sin_plan";
+  const progressLabel = onbState === "completado"
+    ? "Onboarding completado"
+    : onbState === "onboarding"
+      ? `${user?.onboarding_steps_done ?? 0} de ${user?.onboarding_steps_total ?? 0} pasos`
+      : "Sin plan asignado";
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -68,12 +73,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </div>
           </div>
 
-          {/* Progreso */}
+          {/* Progreso (derivado de los planes asignados) */}
           <div className="mt-3">
             <div className="flex justify-between mb-1">
-              <span className="text-slate-500 text-xs">
-                Día {user?.onboarding_day ?? 0} de {user?.onboarding_total_days ?? 0}
-              </span>
+              <span className="text-slate-500 text-xs">{progressLabel}</span>
               <span className="text-indigo-400 text-xs font-medium">{progress}%</span>
             </div>
             <div className="h-1.5 bg-[#2a3354] rounded-full overflow-hidden">

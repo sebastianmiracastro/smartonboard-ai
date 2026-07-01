@@ -103,7 +103,7 @@ class UserCreate(BaseModel):
     role_id: Optional[str] = None
     system_role: str = "empleado"
     start_date: Optional[str] = None
-    onboarding_total_days: int = 15
+    # El progreso de onboarding se deriva de los planes asignados, no se fija al crear.
     # Datos de RR.HH.
     document_id: Optional[str] = None
     gender: Optional[str] = None
@@ -124,7 +124,6 @@ class UserUpdate(BaseModel):
     system_role: Optional[str] = None
     status: Optional[str] = None
     start_date: Optional[str] = None
-    onboarding_total_days: Optional[int] = None
     document_id: Optional[str] = None
     gender: Optional[str] = None
     birth_date: Optional[str] = None
@@ -144,8 +143,11 @@ class UserOut(BaseModel):
     email: str
     system_role: str
     status: str
-    onboarding_day: int
-    onboarding_total_days: int
+    # Progreso de onboarding derivado de los planes asignados (fuente única para la UI)
+    onboarding_progress: int = 0            # % de pasos completados de los planes en curso
+    onboarding_state: str = "sin_plan"      # sin_plan | onboarding | completado
+    onboarding_steps_done: int = 0
+    onboarding_steps_total: int = 0
     department_id: Optional[str]
     role_id: Optional[str]
     start_date: Optional[str]
@@ -185,6 +187,7 @@ class DocumentOut(BaseModel):
     status: str
     progress: Optional[int]
     chunk_count: Optional[int]
+    error_message: Optional[str] = None
     uploaded_at: Optional[datetime]
     require_rrhh: bool
     require_gerencia: bool

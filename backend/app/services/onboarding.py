@@ -80,8 +80,6 @@ def assign_plan_to_user(db: Session, plan: OnboardingPlan, user: User) -> Employ
     # El empleado entra (o vuelve) a onboarding
     user.status = "onboarding"
     user.onboarding_plan_id = plan.id
-    if plan.duration_days:
-        user.onboarding_total_days = plan.duration_days
 
     return ep
 
@@ -200,6 +198,50 @@ def grade_quiz(db: Session, step: EmployeeTask, answers: List) -> Tuple[float, i
 
     score = round(correct_count / total * 100, 1) if total else 0.0
     return score, correct_count, total, detail
+
+
+# ─── PROGRESO DE ONBOARDING (derivado de los planes, no de días fijos) ───────
+
+def compute_onboarding_progress(db: Session, user: User) -> dict:
+    """Progreso REAL del empleado a partir de sus planes asignados.
+
+    - Cuenta los pasos de los planes EN CURSO (sin_empezar / en_progreso).
+    - `percent` = pasos completados / total de esos planes.
+    - Estados: 'onboarding' (hay planes en curso), 'completado' (solo hay planes
+      finalizados) o 'sin_plan' (no tiene ninguno). Al asignar un plan nuevo a un
+      empleado completado, vuelve a 'onboarding' y la barra reaparece.
+    """
+    plans = db.query(EmployeePlan).filter(EmployeePlan.user_id == user.id).all()
+    en_curso = [p for p in plans if p.status in ("sin_empezar", "en_progreso")]
+    finalizados = [p for p in plans if p.status == "finalizado"]
+
+    if en_curso:
+        steps = db.query(EmployeeTask).filter(
+            EmployeeTask.employee_plan_id.in_([p.id for p in en_curso])
+        ).all()
+        total = len(steps)
+        done = sum(1 for s in steps if s.status == "completada")
+        percent = round(done / total * 100) if total else 0
+        return {"state": "onboarding", "percent": percent,
+                "steps_done": done, "steps_total": total, "active_plans": len(en_curso)}
+
+    if finalizados:
+        return {"state": "completado", "percent": 100,
+                "steps_done": 0, "steps_total": 0, "active_plans": 0}
+
+    return {"state": "sin_plan", "percent": 0,
+            "steps_done": 0, "steps_total": 0, "active_plans": 0}
+
+
+def attach_onboarding_progress(db: Session, user: User) -> User:
+    """Adjunta el progreso calculado como atributos del usuario para que la API
+    (UserOut) lo exponga sin persistirlo. Es la única fuente de progreso de la UI."""
+    p = compute_onboarding_progress(db, user)
+    user.onboarding_progress = p["percent"]
+    user.onboarding_state = p["state"]
+    user.onboarding_steps_done = p["steps_done"]
+    user.onboarding_steps_total = p["steps_total"]
+    return user
 
 
 def reset_plan_on_fail(db: Session, ep: EmployeePlan, score: float) -> Optional[EmployeePlan]:

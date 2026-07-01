@@ -26,13 +26,6 @@ interface Conversation {
   created_at?: string;
 }
 
-const suggestions = [
-  "¿Cuáles son mis responsabilidades?",
-  "¿Cómo solicito vacaciones?",
-  "¿Cómo muevo un ticket en Jira?",
-  "¿A quién le reporto?",
-];
-
 const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
@@ -343,21 +336,6 @@ export default function ChatPage() {
 
           <div ref={bottomRef} />
         </div>
-
-        {/* Sugerencias */}
-        {messages.length === 1 && (
-          <div className="flex flex-wrap gap-2 pb-3">
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                onClick={() => sendMessage(s)}
-                className="bg-[#161e33] border border-[#2a3354] hover:border-indigo-500/40 text-slate-300 hover:text-indigo-300 text-xs px-3 py-2 rounded-xl transition-colors"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Input */}
         <div className="flex items-center gap-3 pt-3 border-t border-[#2a3354]">
