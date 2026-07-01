@@ -8,8 +8,9 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     DEBUG: bool = True
 
-    # Base de datos
-    DATABASE_URL: str = "sqlite:///./smartonboard.db"
+    # Base de datos: PostgreSQL en contenedor Docker (ver docker-compose.yml).
+    # El valor real se inyecta desde backend/.env.docker al levantar los contenedores.
+    DATABASE_URL: str = "postgresql://smartonboard:smartonboard123@db:5432/smartonboard"
 
     # JWT
     SECRET_KEY: str = INSECURE_DEFAULT_KEY

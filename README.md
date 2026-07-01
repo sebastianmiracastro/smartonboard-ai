@@ -22,7 +22,7 @@ SmartOnboard AI automatiza y personaliza el proceso de incorporación de nuevos 
 
 ### Backend
 - FastAPI (Python 3.12)
-- SQLAlchemy + SQLite (desarrollo) / PostgreSQL (producción)
+- SQLAlchemy + PostgreSQL (en contenedor Docker)
 - JWT + OAuth2
 
 ### Inteligencia Artificial
@@ -45,46 +45,48 @@ Proyecto De Grado/
 
 ## Instalación y ejecución
 
+Todo el sistema corre en Docker: base de datos PostgreSQL, backend y frontend
+se levantan juntos con un solo comando.
+
 ### Requisitos
-- Node.js 20+
-- Python 3.12
+- Docker Desktop
 - Git
 
-### Frontend
+### Levantar el proyecto
+
+Desde la raíz del repositorio:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+docker compose up --build          # DESARROLLO (hot-reload)
+docker compose -f docker-compose.yml up --build   # PRODUCCIÓN
 ```
 
-Disponible en http://localhost:3000
+| Servicio | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend / Swagger | http://localhost:8000/docs |
+| PostgreSQL | localhost:5432 |
 
-### Backend
+El seed (solo la Directora de RR.HH.) se aplica automáticamente al arrancar el backend.
+
+### Reestablecer la base de datos
+
+Borra todos los datos y vuelve a aplicar el seed:
 
 ```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # Mac/Linux
-pip install -r requirements.txt
-python -m app.db.seed
-uvicorn main:app --reload
+docker compose exec backend python -m app.db.reset        # pide confirmación
+docker compose exec backend python -m app.db.reset --yes  # sin confirmación
 ```
-
-Disponible en http://localhost:8000  
-Documentación Swagger en http://localhost:8000/docs
 
 ---
 
 ## Credenciales de prueba
 
+El seed solo crea la Directora de RR.HH.; los demás usuarios se dan de alta desde la UI.
+
 | Usuario | Email | Contraseña | Rol |
 |---|---|---|---|
-| Andrea Salcedo | andrea.salcedo@techcorp.co | demo123 | RR.HH. |
-| Carlos Mejía | carlos.mejia@techcorp.co | demo123 | Empleado |
-| Laura Torres | laura.torres@techcorp.co | demo123 | Empleado |
-| Sebastián Ríos | sebastian.rios@techcorp.co | demo123 | Empleado |
+| Lucía Hernández | lucia.hernandez@novatech.co | demo123 | RR.HH. — Directora |
 
 ---
 
@@ -138,15 +140,17 @@ Documentación Swagger en http://localhost:8000/docs
 
 ## Variables de entorno
 
-Crea un archivo `.env` en la carpeta `backend`:
+Docker Compose inyecta `backend/.env.docker` en el contenedor del backend:
 
 ```env
 APP_NAME=SmartOnboard AI
-DEBUG=True
-DATABASE_URL=sqlite:///./smartonboard.db
+DEBUG=False
+DATABASE_URL=postgresql://smartonboard:smartonboard123@db:5432/smartonboard
 SECRET_KEY=tu-secret-key-aqui
-OPENAI_API_KEY=sk-tu-clave-aqui
 ```
+
+> La clave de OpenAI no se configura por entorno: cada empresa la guarda desde
+> la UI (multi-tenant). Sin clave, el agente usa un sintetizador extractivo local.
 
 ---
 

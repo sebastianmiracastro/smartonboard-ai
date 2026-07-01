@@ -29,7 +29,7 @@ SmartOnboard AI resuelve esto con una plataforma SaaS donde la empresa sube su d
 ### Backend
 - FastAPI (Python 3.12)
 - SQLAlchemy + Alembic
-- SQLite en desarrollo (migrar a PostgreSQL en producción)
+- PostgreSQL en contenedor Docker (servicio `db`)
 - JWT con python-jose + passlib
 - Celery + Redis para workers asíncronos
 - Puerto: 8000
@@ -167,49 +167,50 @@ Niveles de profundidad: basico, intermedio, avanzado
 
 ## Credenciales de prueba
 
+El seed solo crea la Directora de RR.HH. El resto de usuarios se crean desde la UI.
+
 | Nombre | Email | Contraseña | Rol |
 |---|---|---|---|
-| Andrea Salcedo | andrea.salcedo@techcorp.co | demo123 | RR.HH. |
-| Carlos Mejía | carlos.mejia@techcorp.co | demo123 | Empleado onboarding |
-| Laura Torres | laura.torres@techcorp.co | demo123 | Empleado onboarding |
-| Sebastián Ríos | sebastian.rios@techcorp.co | demo123 | Empleado onboarding |
+| Lucía Hernández | lucia.hernandez@novatech.co | demo123 | RR.HH. — Directora |
 
 ---
 
-## Variables de entorno (.env en backend/)
+## Variables de entorno (backend/.env.docker)
+
+Docker Compose inyecta este archivo al contenedor del backend:
 
 ```env
 APP_NAME=SmartOnboard AI
-DEBUG=True
-DATABASE_URL=sqlite:///./smartonboard.db
-SECRET_KEY=supersecretkey-cambiar-en-produccion
-OPENAI_API_KEY=        # Dejar vacío usa respuestas mock
+DEBUG=False
+DATABASE_URL=postgresql://smartonboard:smartonboard123@db:5432/smartonboard
+SECRET_KEY=cambiar-en-produccion
 ```
+
+La clave de IA (OpenAI) NO se configura por entorno: cada empresa la guarda
+desde la UI (multi-tenant). Sin clave, el agente usa el sintetizador extractivo propio.
 
 ---
 
 ## Cómo correr el proyecto
 
-### Backend
+Todo corre en Docker: base de datos (PostgreSQL), backend y frontend se
+levantan juntos con un solo comando desde la raíz del repositorio.
+
 ```bash
-cd backend
-venv\Scripts\activate
-uvicorn main:app --reload
-# Swagger en http://localhost:8000/docs
+docker compose up --build          # DESARROLLO (hot-reload, aplica override)
+docker compose -f docker-compose.yml up --build   # PRODUCCIÓN (sin override)
 ```
 
-### Frontend
-```bash
-cd frontend
-npm run dev
-# App en http://localhost:3000
-```
+- Frontend: http://localhost:3000
+- Backend / Swagger: http://localhost:8000/docs
+- PostgreSQL: localhost:5432 (usuario/clave/BD: `smartonboard`)
 
-### Seed de datos (primera vez)
+El seed (solo la Directora de RR.HH.) se aplica automáticamente al arrancar el
+backend. Para reestablecer la BD desde cero y volver a sembrar:
+
 ```bash
-cd backend
-venv\Scripts\activate
-python -m app.db.seed
+docker compose exec backend python -m app.db.reset        # pide confirmación
+docker compose exec backend python -m app.db.reset --yes  # sin confirmación
 ```
 
 ---
@@ -223,7 +224,7 @@ python -m app.db.seed
 - Manejo de errores incompleto — si el token expira no redirige al login automáticamente
 
 ### Mejoras pendientes
-- Migrar SQLite a PostgreSQL con pgvector real
+- Usar el tipo `vector` nativo de pgvector (hoy los embeddings van como JSON string)
 - Agregar interceptor de token expirado en api.ts
 - Tests unitarios en el backend (pytest)
 - Gráficas de métricas en el dashboard con Recharts
@@ -264,7 +265,7 @@ python -m app.db.seed
 ## Notas importantes para Claude Code
 
 - Tailwind 4 NO usa tailwind.config.ts — la configuración va en globals.css con @import "tailwindcss"
-- El backend corre con SQLite por ahora — los embeddings se guardan como JSON string en la columna embedding de document_chunks, NO como vector nativo de pgvector
+- El backend corre sobre PostgreSQL en un contenedor Docker — los embeddings se guardan como JSON string en la columna embedding de document_chunks, todavía NO como vector nativo de pgvector
 - El agente funciona sin OPENAI_API_KEY usando respuestas mock — no romper esa lógica
 - Multi-tenant: cada empresa tiene su company_id, todos los queries deben filtrar por company_id
 - El seed crea la empresa con id="comp-001" — los usuarios del seed tienen ese company_id hardcodeado

@@ -1,27 +1,44 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base, get_db
 from app.models.models import Company, Department, Role, User, OnboardingPlan, OnboardingTask, EmployeeTask, Document
 from app.core.security import hash_password
 from main import app
 
-# StaticPool reutiliza la misma conexión en todos los accesos —
-# necesario para SQLite en memoria, donde cada nueva conexión
-# sería una BD vacía independiente.
-TEST_DATABASE_URL = "sqlite://"
+# Base de datos de PRUEBA en PostgreSQL. Por defecto usa el mismo contenedor
+# `db` (mapeado a localhost:5432) pero una base independiente para no tocar
+# los datos de desarrollo. Se puede sobreescribir con la variable de entorno.
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql://smartonboard:smartonboard123@localhost:5432/smartonboard_test",
+)
+
+
+def _ensure_test_database(url: str) -> None:
+    """Crea la base de datos de prueba si aún no existe (idempotente)."""
+    target = make_url(url)
+    db_name = target.database
+    # Conexión a la base de mantenimiento `postgres` para poder crear la de prueba.
+    admin = create_engine(target.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": db_name}
+        ).scalar()
+        if not exists:
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    admin.dispose()
 
 
 @pytest.fixture(scope="function")
 def db_session():
-    engine = create_engine(
-        TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    _ensure_test_database(TEST_DATABASE_URL)
+    engine = create_engine(TEST_DATABASE_URL)
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestSessionLocal()

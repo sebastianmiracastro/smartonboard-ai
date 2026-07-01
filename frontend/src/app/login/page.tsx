@@ -125,20 +125,14 @@ export default function LoginPage() {
           {showDemo && (
             <div className="mt-6 pt-6 border-t border-[#2a3354]">
               <p className="text-slate-500 text-xs text-center mb-3">
-                Accesos rápidos (demo)
+                Acceso rápido (demo)
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setEmail("andrea.salcedo@techcorp.co"); setPassword("demo123"); }}
+                  onClick={() => { setEmail("lucia.hernandez@novatech.co"); setPassword("demo123"); }}
                   className="flex-1 bg-[#1c2540] hover:bg-[#2a3354] border border-[#2a3354] text-slate-300 text-xs py-2 rounded-lg transition-colors"
                 >
                   Panel RR.HH.
-                </button>
-                <button
-                  onClick={() => { setEmail("carlos.mejia@techcorp.co"); setPassword("demo123"); }}
-                  className="flex-1 bg-[#1c2540] hover:bg-[#2a3354] border border-[#2a3354] text-slate-300 text-xs py-2 rounded-lg transition-colors"
-                >
-                  Portal Empleado
                 </button>
               </div>
             </div>

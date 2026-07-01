@@ -1,16 +1,15 @@
-"""Migraciones ligeras, portables entre SQLite y PostgreSQL.
+"""Migraciones ligeras para PostgreSQL.
 
 create_all() crea tablas nuevas pero NO agrega columnas a tablas existentes.
 Esta función agrega columnas faltantes con ALTER TABLE de forma idempotente,
 para no tener que borrar la base de datos en cada cambio de esquema.
 
-Usa el inspector de SQLAlchemy (agnóstico al motor) para detectar tablas y
-columnas existentes, y normaliza el DDL según el dialecto activo.
+Usa el inspector de SQLAlchemy para detectar tablas y columnas existentes.
 """
 from sqlalchemy import text, inspect
 from app.db.database import engine
 
-# tabla -> { columna: definición SQL (en sintaxis SQLite/genérica) }
+# tabla -> { columna: definición SQL (sintaxis PostgreSQL) }
 COLUMNS = {
     "companies": {
         "openai_api_key": "TEXT",
@@ -54,8 +53,8 @@ COLUMNS = {
         "cargo_ids": "TEXT",
     },
     "onboarding_plans": {
-        "auto_assign": "BOOLEAN DEFAULT 0",
-        "is_active": "BOOLEAN DEFAULT 1",
+        "auto_assign": "BOOLEAN DEFAULT false",
+        "is_active": "BOOLEAN DEFAULT true",
         "pass_threshold": "INTEGER DEFAULT 70",
     },
     "onboarding_tasks": {
@@ -67,8 +66,8 @@ COLUMNS = {
         "order_index": "INTEGER DEFAULT 0",
         "estimated_minutes": "INTEGER DEFAULT 0",
         "time_spent_seconds": "INTEGER DEFAULT 0",
-        "started_at": "DATETIME",
-        "last_resumed_at": "DATETIME",
+        "started_at": "TIMESTAMP",
+        "last_resumed_at": "TIMESTAMP",
         "document_id": "VARCHAR",
     },
     "users": {
@@ -87,19 +86,8 @@ COLUMNS = {
 }
 
 
-def _normalize_ddl(ddl: str, dialect: str) -> str:
-    """Adapta el DDL genérico (escrito para SQLite) al dialecto activo."""
-    if dialect == "postgresql":
-        # PostgreSQL no acepta DATETIME ni booleanos como enteros.
-        ddl = ddl.replace("DATETIME", "TIMESTAMP")
-        ddl = ddl.replace("BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT false")
-        ddl = ddl.replace("BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT true")
-    return ddl
-
-
 def run_migrations():
     inspector = inspect(engine)
-    dialect = engine.dialect.name
     existing_tables = set(inspector.get_table_names())
 
     with engine.begin() as conn:
@@ -109,5 +97,4 @@ def run_migrations():
             existing = {c["name"] for c in inspector.get_columns(table)}
             for col, ddl in cols.items():
                 if col not in existing:
-                    ddl = _normalize_ddl(ddl, dialect)
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))

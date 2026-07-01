@@ -1,7 +1,3 @@
-# Respaldos temporales de la base de datos
-*.db.bak-*
-backend/smartonboard.db.bak-*
-
 # Python
 __pycache__/
 *.pyc

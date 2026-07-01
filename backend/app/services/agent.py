@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.services.tagging import categorize
 from app.services.extractive import synthesize_answer
+from app.services.platform_kb import is_platform_question, mentions_platform, answer_platform_question
 from app.services.agent_tools import (
     ToolContext,
     build_langchain_tools,
@@ -273,6 +274,10 @@ def detect_intent(question: str) -> str:
         return "completar"
     if any(w in q for w in _CONSULTAR_KW):
         return "consultar_tareas"
+    # Pregunta sobre la propia plataforma (qué es, alcance, objetivo, modelo…):
+    # se responde con el conocimiento nativo del producto, no con RAG de la empresa.
+    if is_platform_question(question):
+        return "plataforma"
     return "informativa"
 
 
@@ -285,8 +290,14 @@ def _run_heuristic_router(question: str, ctx: ToolContext) -> str:
         return ctx.completar_tarea(question)
     if intent == "consultar_tareas":
         return ctx.consultar_mis_tareas()
+    if intent == "plataforma":
+        return answer_platform_question(question, api_key=None)
     extra_queries = expand_queries(question, api_key=None)
     context = ctx.buscar_en_documentos(question, queries=extra_queries)
+    # Red de seguridad: sin resultados en los documentos y la pregunta alude a la
+    # plataforma → responde el conocimiento propio en vez de "no encontré nada".
+    if not ctx.sources and mentions_platform(question):
+        return answer_platform_question(question, api_key=None)
     return _extractive_or_mock(question, ctx, extra_queries, context if ctx.sources else "")
 
 
@@ -414,6 +425,13 @@ def run_agent(
         answer = ctx.completar_tarea(question)
     elif intent == "consultar_tareas":
         answer = ctx.consultar_mis_tareas()
+    elif intent == "plataforma":
+        # Auto-conocimiento del producto: se responde con la base nativa de la
+        # plataforma (con clave redacta el LLM; sin clave, respuesta curada offline).
+        answer = answer_platform_question(
+            question, api_key=api_key, model=ai_model,
+            temperature=ai_temperature, agent_name=agent_name, history=history or [],
+        )
     else:
         # Informativa: el backend investiga a fondo (varias consultas + vecinos) y el
         # LLM reorganiza los fragmentos en una respuesta completa.
@@ -422,7 +440,14 @@ def run_agent(
         # 2) Recuperación profunda con todas las consultas.
         context = ctx.buscar_en_documentos(question, queries=extra_queries)
         grounding = context if ctx.sources else ""
-        if api_key:
+        if not ctx.sources and mentions_platform(question):
+            # Red de seguridad: sin soporte documental y la pregunta alude a la
+            # plataforma → conocimiento propio en vez de "no encontré nada".
+            answer = answer_platform_question(
+                question, api_key=api_key, model=ai_model,
+                temperature=ai_temperature, agent_name=agent_name, history=history or [],
+            )
+        elif api_key:
             try:
                 # 3) El LLM redacta una respuesta completa fundada en el contexto.
                 answer = _answer_grounded(
