@@ -78,6 +78,17 @@ export const api = {
     request(`/api/documents/${id}`, { method: "DELETE" }),
   retryDocument: (id: string) =>
     request(`/api/documents/${id}/retry`, { method: "POST" }),
+  // Abre el archivo original (preview/descarga) en una pestaña nueva, con el token.
+  openDocument: async (id: string) => {
+    const token = getToken();
+    const res = await fetch(`${BASE_URL}/api/documents/${id}/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("No se pudo abrir el documento");
+    const url = URL.createObjectURL(await res.blob());
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
   uploadDocument: async (file: File, params: Record<string, any> = {}) => {
     const token = getToken();
     const fd = new FormData();

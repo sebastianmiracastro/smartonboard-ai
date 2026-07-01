@@ -24,6 +24,13 @@ const DEPTH_LABELS: Record<string, string> = {
   avanzado: "Avanzado",
 };
 
+// Tipos de alerta de RR.HH. con su etiqueta y color
+const ALERT_KINDS: Record<string, { label: string; classes: string }> = {
+  solicitud: { label: "Pidió ayuda", classes: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" },
+  sin_respuesta: { label: "Pregunta sin respuesta", classes: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+  plan_fallido: { label: "No aprobó un plan", classes: "bg-red-500/15 text-red-300 border-red-500/30" },
+};
+
 const CATEGORY_COLORS = ["#6d5cff", "#8b5cf6", "#10b981", "#f59e0b", "#ec4899", "#64748b"];
 
 // Color de celda del heatmap por índice de comprensión (buckets consistentes con la app)
@@ -196,10 +203,17 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="divide-y divide-amber-500/10">
-            {pendingAlerts.map((a) => (
+            {pendingAlerts.map((a) => {
+              const kind = ALERT_KINDS[a.kind as string] || ALERT_KINDS.solicitud;
+              return (
               <div key={a.id} className="flex items-center gap-3 px-6 py-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium">{a.user_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-white text-sm font-medium">{a.user_name}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${kind.classes}`}>
+                      {kind.label}
+                    </span>
+                  </div>
                   <p className="text-slate-400 text-xs truncate">{a.motivo}</p>
                 </div>
                 <button
@@ -209,7 +223,8 @@ export default function DashboardPage() {
                   <CheckCircle2 size={14} /> Marcar atendida
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

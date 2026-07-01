@@ -134,6 +134,12 @@ export default function LoginPage() {
                 >
                   Panel RR.HH.
                 </button>
+                <button
+                  onClick={() => { setEmail("alejandro.cardenas@novatech.co"); setPassword("demo123"); }}
+                  className="flex-1 bg-[#1c2540] hover:bg-[#2a3354] border border-[#2a3354] text-slate-300 text-xs py-2 rounded-lg transition-colors"
+                >
+                  Gerencia
+                </button>
               </div>
             </div>
           )}

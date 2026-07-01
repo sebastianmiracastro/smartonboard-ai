@@ -140,8 +140,8 @@ def build_grounded_prompt(agent_name: str = "Sara") -> str:
         f"inventes nada que no esté ahí.\n"
         f"- Si el contexto cubre la pregunta solo en parte, responde a fondo lo que SÍ está "
         f"cubierto y señala con claridad qué falta y a quién acudir (RR.HH.).\n"
-        f"- Si el contexto no contiene nada relevante, dilo con honestidad y sugiere "
-        f"consultar a RR.HH.; no rellenes con suposiciones.\n"
+        f"- Si el contexto NO permite responder la pregunta (la información no está ahí), "
+        f"responde EXACTAMENTE con {NO_ANSWER_SENTINEL} y NADA más; no rellenes con suposiciones.\n"
         f"- Extensión libre: sé tan detallado como haga falta para no dejar brechas, pero "
         f"sin repetir ni divagar."
     )
@@ -442,6 +442,32 @@ def generate_mock_answer(question: str, context: str, has_any_docs: bool = True)
     )
 
 
+# ─── INTERVENCIÓN HUMANA (escalado cuando no hay respuesta) ───────────────────
+
+# Sentinela que el LLM devuelve cuando el contexto NO permite responder la pregunta.
+NO_ANSWER_SENTINEL = "NO_TENGO_RESPUESTA"
+
+
+def _is_no_answer(answer: str) -> bool:
+    """True si el LLM señaló que el contexto no permite responder."""
+    return (answer or "").strip().upper().startswith(NO_ANSWER_SENTINEL)
+
+
+def _escalate_to_human(ctx: ToolContext, question: str) -> str:
+    """Marca el caso como INTERVENCIÓN HUMANA: crea una alerta para RR.HH. y devuelve
+    un mensaje honesto. Se usa cuando ni el índice ni el fallback léxico, ni el LLM
+    con el contexto, dan una respuesta acorde a la pregunta."""
+    ctx.escalar_a_rrhh(
+        f"El asistente no encontró respuesta a: «{question}». Requiere intervención humana.",
+        kind="sin_respuesta",
+    )
+    return (
+        "No encontré una respuesta clara a tu pregunta en la documentación disponible, "
+        "así que la marqué para que una persona de RR.HH. te ayude directamente; te "
+        "contactarán pronto. ¿Puedo ayudarte con algo más mientras tanto?"
+    )
+
+
 # ─── TÍTULO AUTOMÁTICO DE LA CONVERSACIÓN ────────────────────────────────────
 
 def generate_title(
@@ -567,6 +593,7 @@ def run_agent(
     # Enrutado en el backend: las acciones se resuelven sin LLM; solo lo informativo
     # consume tokens, y con contexto MINIFICADO (rol + tema + relevancia).
     intent = detect_intent(rq)
+    human_intervention = False  # se marca si el caso se escala a RR.HH. por no tener respuesta
 
     if intent == "social":
         answer = build_social_answer(question, agent_name)
@@ -593,21 +620,33 @@ def run_agent(
             temperature=ai_temperature, agent_name=agent_name, history=history or [],
         )
     else:
-        # Informativa: el backend investiga a fondo (varias consultas + vecinos) y el
-        # LLM reorganiza los fragmentos en una respuesta completa.
+        # Informativa: recuperación SEMÁNTICA → FALLBACK léxico → responder / escalar.
         # 1) Expandir la pregunta en varias consultas (varios ángulos de búsqueda).
         extra_queries = expand_queries(question, api_key, model=ai_model)
-        # 2) Recuperación profunda con todas las consultas.
+        # 2) Recuperación profunda (índice de embeddings).
         context = ctx.buscar_en_documentos(question, queries=extra_queries)
+        if not ctx.sources:
+            # 2b) FALLBACK: re-lee los documentos por PALABRAS CLAVE, por si el índice
+            #     semántico no priorizó un fragmento que SÍ contiene lo preguntado.
+            context = ctx.reconsultar_documentos(question)
         grounding = context if ctx.sources else ""
-        if not ctx.sources and (mentions_platform(rq) or is_product_topic(rq)):
-            # Red de seguridad: sin soporte documental y la pregunta alude a la
-            # plataforma o toca un tema intrínseco del producto (integración,
-            # seguridad, roadmap…) → conocimiento propio en vez de "no encontré".
+
+        if not grounding and (mentions_platform(rq) or is_product_topic(rq)):
+            # Red de seguridad: la pregunta alude a la plataforma o toca un tema
+            # intrínseco del producto → conocimiento propio en vez de "no encontré".
             answer = answer_platform_question(
                 rq, api_key=api_key, model=ai_model,
                 temperature=ai_temperature, agent_name=agent_name, history=history or [],
             )
+        elif not grounding:
+            # Ni el índice ni el fallback léxico hallaron nada.
+            if ctx.has_accessible_documents():
+                # Hay documentos pero ninguno responde → INTERVENCIÓN HUMANA.
+                answer = _escalate_to_human(ctx, question)
+                human_intervention = True
+            else:
+                # La empresa aún no tiene documentos para este perfil.
+                answer = generate_mock_answer(question, "", has_any_docs=False)
         elif api_key:
             try:
                 # 3) El LLM redacta una respuesta completa fundada en el contexto.
@@ -616,13 +655,19 @@ def run_agent(
                     api_key=api_key, model=ai_model,
                     temperature=ai_temperature, agent_name=agent_name,
                 )
-            except Exception as e:
+            except Exception:
                 # Falla la IA (clave inválida, modelo no disponible, red): se registra
                 # el error completo para diagnóstico y se cae al modo demo.
                 print("⚠️  La llamada al LLM falló; se usa el sintetizador extractivo. Detalle:")
                 traceback.print_exc()
                 answer = _extractive_or_mock(question, ctx, extra_queries, grounding,
                                              min_similarity=rag_min_similarity)
+            else:
+                # VERIFICACIÓN con la clave: si el LLM concluye que el contexto no
+                # responde la pregunta → INTERVENCIÓN HUMANA (escalado a RR.HH.).
+                if _is_no_answer(answer):
+                    answer = _escalate_to_human(ctx, question)
+                    human_intervention = True
         else:
             # Sin clave de IA: responde el sintetizador extractivo propio (offline).
             answer = _extractive_or_mock(question, ctx, extra_queries, grounding,
@@ -636,9 +681,10 @@ def run_agent(
     # La comprensión SOLO se mide en preguntas de conocimiento (informativa): los
     # saludos y las consultas de plataforma/perfil/tareas no son señal de cuánto
     # entiende el empleado del contenido, así que no contaminan la métrica.
-    if intent == "informativa":
+    if intent == "informativa" and not human_intervention:
         comprehension = compute_comprehension(ctx.answer_confidence, has_docs, ctx.tools_used)
     else:
+        # Sin respuesta (escalado) o intents no-informativos: no es señal de comprensión.
         comprehension = None
 
     return {

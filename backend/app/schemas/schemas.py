@@ -153,6 +153,7 @@ class UserOut(BaseModel):
     start_date: Optional[str]
     department_name: Optional[str] = None
     role_name: Optional[str] = None
+    company_name: Optional[str] = None
     # Datos de RR.HH.
     document_id: Optional[str] = None
     gender: Optional[str] = None

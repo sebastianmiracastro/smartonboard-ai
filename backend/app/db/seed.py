@@ -31,23 +31,27 @@ def seed():
         print("Creando datos mínimos...")
 
         # Empresa
-        company = Company(id="comp-001", name="NovaTech S.A.S.", slug="novatech", industry="Tecnología")
+        company = Company(id="comp-001", name="NovaTech Solutions S.A.S", slug="novatech", industry="Tecnología")
         db.add(company)
         db.flush()
 
-        # Departamento: RR.HH.
+        # Departamentos: RR.HH. y Gerencia
         dept_rrhh = Department(id="dept-rrhh", company_id="comp-001", name="Recursos Humanos",
                                description="Gestión del talento", is_rrhh=True, is_gerencia=False, color="#10b981")
-        db.add_all([dept_rrhh])
+        dept_ger = Department(id="dept-gerencia", company_id="comp-001", name="Gerencia",
+                              description="Dirección general", is_rrhh=False, is_gerencia=True, color="#6d5cff")
+        db.add_all([dept_rrhh, dept_ger])
         db.flush()
 
-        # Un cargo
+        # Cargos
         role_hr = Role(id="role-hr", department_id="dept-rrhh", name="Directora de RR.HH.",
                        seniority_level=4, seniority_label="Director")
-        db.add_all([role_hr])
+        role_ger = Role(id="role-gerente", department_id="dept-gerencia", name="Gerente General",
+                        seniority_level=4, seniority_label="Director")
+        db.add_all([role_hr, role_ger])
         db.flush()
 
-        # Único usuario: la Directora de RR.HH.
+        # Usuarios: Directora de RR.HH. y Gerente General (para probar los 3 niveles de acceso)
         pw = hash_password("demo123")
         users = [
             User(
@@ -57,12 +61,20 @@ def seed():
                 hashed_password=pw, system_role="rrhh", status="activo",
                 start_date="2024-01-15",
             ),
+            User(
+                id="user-gerencia", company_id="comp-001",
+                department_id="dept-gerencia", role_id="role-gerente",
+                full_name="Alejandro Cárdenas", email="alejandro.cardenas@novatech.co",
+                hashed_password=pw, system_role="gerencia", status="activo",
+                start_date="2023-06-01",
+            ),
         ]
         db.add_all(users)
         db.commit()
 
-        print("Listo. Usuario creado (contraseña demo123):")
-        print("  - lucia.hernandez@novatech.co  (RR.HH. — Directora)")
+        print("Listo. Usuarios creados (contraseña demo123):")
+        print("  - lucia.hernandez@novatech.co    (RR.HH. — Directora)")
+        print("  - alejandro.cardenas@novatech.co (Gerencia — Gerente General)")
 
     except Exception as e:
         db.rollback()

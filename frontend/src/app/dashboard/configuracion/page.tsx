@@ -12,7 +12,7 @@ export default function ConfiguracionPage() {
   const toast = useToast();
   const [config, setConfig] = useState({
     agentName: "Sara",
-    welcomeMessage: "Hola 👋 Soy tu asistente de onboarding. Estoy aquí para ayudarte con cualquier duda sobre la empresa, tu rol, procesos o herramientas.",
+    welcomeMessage: "Hola 👋 Soy tu asistente de onboarding. Estoy aquí para acompañarte y resolver tus dudas durante tu incorporación.",
     model: "gpt-4o-mini",
     temperature: 0.4,
     ragTopK: 5,

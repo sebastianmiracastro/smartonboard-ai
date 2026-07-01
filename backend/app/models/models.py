@@ -93,6 +93,10 @@ class User(Base):
     def role_name(self) -> str | None:
         return self.role.name if self.role else None
 
+    @property
+    def company_name(self) -> str | None:
+        return self.company.name if self.company else None
+
 class Document(Base):
     __tablename__ = "documents"
     id = Column(String, primary_key=True, default=gen_uuid)
@@ -104,7 +108,8 @@ class Document(Base):
     progress = Column(Integer, default=0)
     chunk_count = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)         # motivo legible si el procesamiento falla
-    file_data = Column(LargeBinary, nullable=True)      # bytes del archivo original (para reprocesar)
+    file_data = Column(LargeBinary, nullable=True)      # respaldo en BD (docs antiguos); los nuevos van al folder
+    file_path = Column(String, nullable=True)           # ruta del archivo guardado en backend/uploads/
     manual_category = Column(String, nullable=True)     # categoría elegida por RR.HH. al subir (para reprocesar)
     uploaded_by = Column(String, ForeignKey("users.id"))
     uploaded_at = Column(DateTime, server_default=func.now())
@@ -375,6 +380,7 @@ class RRHHAlert(Base):
     company_id = Column(String, ForeignKey("companies.id"), nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     motivo = Column(Text, nullable=False)
+    kind = Column(String, default="solicitud")    # solicitud | sin_respuesta | plan_fallido
     status = Column(String, default="pendiente")  # pendiente | atendida
     created_at = Column(DateTime, server_default=func.now())
 

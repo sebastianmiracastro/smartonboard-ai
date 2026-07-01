@@ -30,7 +30,7 @@ const WELCOME: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Hola 👋 Soy tu asistente de onboarding. Estoy aquí para ayudarte con cualquier duda sobre la empresa, tu rol, procesos o herramientas. ¿En qué te puedo ayudar hoy?",
+    "Hola 👋 Soy tu asistente de onboarding. Estoy aquí para acompañarte y resolver tus dudas durante tu incorporación. ¿En qué te puedo ayudar hoy?",
 };
 
 function parseSources(raw?: string | null): Message["sources"] {

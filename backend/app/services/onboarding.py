@@ -256,6 +256,7 @@ def reset_plan_on_fail(db: Session, ep: EmployeePlan, score: float) -> Optional[
         db.add(RRHHAlert(
             company_id=ep.company_id,
             user_id=ep.user_id,
+            kind="plan_fallido",
             motivo=(
                 f"El empleado no aprobó el plan '{ep.plan_name}' tras "
                 f"{ep.attempt_number} intentos (última nota {score:.0f}/100). "

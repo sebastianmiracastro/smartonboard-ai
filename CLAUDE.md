@@ -190,7 +190,15 @@ Orden de prioridad (la primera que coincide gana):
 3. **perfil** (`profile_topic`) — datos del propio usuario: plan, comprensión,
    documentos accesibles (exclusivos/generales), cargo/área → `consultar_mi_perfil`.
 4. **plataforma** (`is_platform_question`) — auto-conocimiento del producto.
-5. **informativa** — RAG sobre los documentos de la empresa.
+5. **informativa** — RAG sobre los documentos de la empresa, con dos redes:
+   - **Fallback léxico** (`reconsultar_documentos`): si el índice semántico no halla
+     nada, re-lee los documentos por PALABRAS CLAVE (por si un término exacto está en
+     el texto pero el embedding no lo priorizó). Respeta el RBAC.
+   - **Intervención humana**: con clave, si el LLM concluye que el contexto no
+     responde (devuelve el sentinela `NO_TENGO_RESPUESTA`), o si tras el fallback no
+     hay nada y SÍ existen documentos, se crea una alerta a RR.HH. (`escalar_a_rrhh`)
+     y se avisa al empleado. Estos casos guardan `comprehension_score = None`.
+   El archivo original se guarda en `Document.file_data` (permite reprocesar y re-leer).
 
 La **comprensión** (`comprehension_score`) SOLO se calcula en la intención
 `informativa`; saludos y consultas de plataforma/perfil/tareas guardan `None` para

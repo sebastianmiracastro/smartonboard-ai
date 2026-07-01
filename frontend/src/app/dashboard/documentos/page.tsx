@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FileText, Upload, Trash2, Shield, Users, Crown, Briefcase, Building2, X, Tag, RotateCw } from "lucide-react";
+import { FileText, Upload, Trash2, Shield, Users, Crown, Briefcase, Building2, X, Tag, RotateCw, AlertTriangle, Eye } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
@@ -49,7 +49,12 @@ export default function DocumentosPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [myRole, setMyRole] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try { setMyRole(JSON.parse(localStorage.getItem("user") || "{}").system_role || ""); } catch {}
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +84,11 @@ export default function DocumentosPage() {
   const deleteDoc = async (id: string) => {
     try { await api.deleteDocument(id); setDocs(docs.filter((d) => d.id !== id)); toast.success("Documento eliminado"); }
     catch (e: any) { toast.error(e.message || "No se pudo eliminar el documento"); }
+  };
+
+  const openDoc = async (id: string) => {
+    try { await api.openDocument(id); }
+    catch (e: any) { toast.error(e.message || "No se pudo abrir el documento"); }
   };
 
   const retryDoc = async (id: string, name: string) => {
@@ -113,17 +123,27 @@ export default function DocumentosPage() {
         require_gerencia: form.require_gerencia,
       };
       const data = await api.uploadDocument(pendingFile, params);
-      setDocs((prev) => [...prev, {
-        id: data.id, name: data.nombre, format: data.nombre.split(".").pop(),
-        size_kb: Math.round(pendingFile.size / 1024), status: "en_cola", progress: 0, chunk_count: 0,
-        uploaded_at: new Date().toISOString(),
-        require_rrhh: form.require_rrhh, require_gerencia: form.require_gerencia,
-        role_permission: form.role_permission || null, dept_permission: form.dept_permission || null,
-        primary_category: form.category || null,
-      }]);
       setPendingFile(null);
-      toast.update(tid, { type: "info", message: "Procesando y extrayendo contextos…" });
-      pollDocumentStatus(data.id, tid);
+      // Si el documento queda restringido POR ENCIMA de mi nivel, no lo veré en la
+      // lista: confirmo la subida y no lo agrego ni hago polling (el índice sigue).
+      const hiddenAfterUpload = form.require_gerencia && myRole !== "gerencia";
+      if (hiddenAfterUpload) {
+        toast.update(tid, {
+          type: "success",
+          message: `“${data.nombre}” subido y en indexación. Queda restringido a Gerencia, así que no aparece en tu lista.`,
+        });
+      } else {
+        setDocs((prev) => [...prev, {
+          id: data.id, name: data.nombre, format: data.nombre.split(".").pop(),
+          size_kb: Math.round(pendingFile.size / 1024), status: "en_cola", progress: 0, chunk_count: 0,
+          uploaded_at: new Date().toISOString(),
+          require_rrhh: form.require_rrhh, require_gerencia: form.require_gerencia,
+          role_permission: form.role_permission || null, dept_permission: form.dept_permission || null,
+          primary_category: form.category || null,
+        }]);
+        toast.update(tid, { type: "info", message: "Procesando y extrayendo contextos…" });
+        pollDocumentStatus(data.id, tid);
+      }
     } catch (e: any) {
       setError(e.message || "No se pudo subir el documento.");
       toast.update(tid, { type: "error", message: e.message || "No se pudo subir el documento" });
@@ -240,6 +260,9 @@ export default function DocumentosPage() {
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusConfig[doc.status]?.classes || statusConfig.en_cola.classes}`}>
                     {statusConfig[doc.status]?.label || doc.status}
                   </span>
+                  <button onClick={() => openDoc(doc.id)} title="Ver / descargar el archivo original" className="text-slate-500 hover:text-indigo-400 transition-colors p-1.5 hover:bg-indigo-500/10 rounded-lg">
+                    <Eye size={14} />
+                  </button>
                   {doc.status === "error" && (
                     <button onClick={() => retryDoc(doc.id, doc.name)} title="Reintentar procesamiento" className="text-slate-500 hover:text-indigo-400 transition-colors p-1.5 hover:bg-indigo-500/10 rounded-lg">
                       <RotateCw size={14} />
@@ -316,6 +339,12 @@ export default function DocumentosPage() {
                   <input type="checkbox" checked={form.require_gerencia} onChange={(e) => setForm({ ...form, require_gerencia: e.target.checked })} className="accent-indigo-500" />
                   <Crown size={14} className="text-amber-400" /> Solo gerencia
                 </label>
+                {form.require_gerencia && myRole !== "gerencia" && (
+                  <p className="flex items-start gap-1.5 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-2">
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                    Este documento quedará visible <b className="font-semibold">solo para Gerencia</b>. Como {myRole === "rrhh" ? "RR.HH." : "tu perfil"}, no lo verás en tu lista después de subirlo.
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a3354]">

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks, Form, Response
+from urllib.parse import quote
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
@@ -9,6 +10,7 @@ from app.models.models import Document, DocumentChunk, User, Company, Role, Depa
 from app.schemas.schemas import DocumentOut
 from app.core.dependencies import get_current_user, require_rrhh
 from app.services.document_processor import extract_text, chunk_text, is_pdf_encrypted
+from app.services.storage import save_document_file, read_document_file, delete_document_file
 from app.services.embeddings import generate_embeddings_batch
 from app.services.rag import index_document_chunks
 from app.services.tagging import tag_document
@@ -154,6 +156,64 @@ def get_documents(
         )
     return query.all()
 
+
+def _user_can_access(doc: Document, user: User) -> bool:
+    """Mismas reglas de acceso que `get_documents`, para un documento concreto."""
+    if user.system_role == "gerencia":
+        return True
+    if doc.require_gerencia:
+        return False
+    if user.system_role == "rrhh":
+        return True
+    seniority = user.role.seniority_level if user.role else 1
+    if doc.require_rrhh:
+        return False
+    if doc.min_seniority is not None and doc.min_seniority > seniority:
+        return False
+    if doc.dept_permission and doc.dept_permission != user.department_id:
+        return False
+    if doc.role_permission and doc.role_permission != user.role_id:
+        return False
+    return True
+
+
+_MEDIA_TYPES = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain; charset=utf-8",
+}
+
+
+@router.get("/{doc_id}/download")
+def download_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve el ARCHIVO ORIGINAL para verlo/descargarlo, respetando el RBAC."""
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.company_id == current_user.company_id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    if not _user_can_access(doc, current_user):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este documento")
+
+    # El archivo se lee del folder del proyecto; para documentos antiguos, de la BD.
+    file_bytes = read_document_file(doc.file_path) or (bytes(doc.file_data) if doc.file_data else None)
+    if not file_bytes:
+        raise HTTPException(status_code=404, detail="El archivo original no está disponible.")
+
+    media = _MEDIA_TYPES.get((doc.format or "").lower(), "application/octet-stream")
+    filename = doc.name or f"documento.{doc.format or 'bin'}"
+    return Response(
+        content=file_bytes,
+        media_type=media,
+        # 'inline' permite previsualizar PDF/txt en el navegador; DOCX se descarga.
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}"},
+    )
+
 @router.post("/upload")
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -206,12 +266,15 @@ async def upload_document(
         role_permission=role_permission,
         dept_permission=dept_permission,
         min_seniority=min_seniority,
-        file_data=file_bytes,        # se guarda para poder reprocesar
         manual_category=category,    # categoría elegida (o None = auto)
     )
     db.add(doc)
     db.commit()
     db.refresh(doc)
+
+    # Guardar el archivo original en el FOLDER del proyecto (para reprocesar/verificar).
+    doc.file_path = save_document_file(current_user.company_id, doc.id, ext, file_bytes)
+    db.commit()
 
     # Procesar en segundo plano
     background_tasks.add_task(
@@ -244,7 +307,9 @@ def retry_document(
     ).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
-    if not doc.file_data:
+    # El archivo se lee del folder del proyecto; para documentos antiguos, de la BD.
+    file_bytes = read_document_file(doc.file_path) or (bytes(doc.file_data) if doc.file_data else None)
+    if not file_bytes:
         raise HTTPException(
             status_code=400,
             detail="Este documento no tiene el archivo guardado; súbelo de nuevo.",
@@ -260,7 +325,7 @@ def retry_document(
         process_document_background,
         doc.id,
         doc.company_id,
-        bytes(doc.file_data),
+        file_bytes,
         doc.format,
         doc.manual_category,
     )
@@ -281,6 +346,7 @@ def delete_document(
         raise HTTPException(status_code=404, detail="Documento no encontrado")
     # Borrar primero los chunks indexados (evita violación de FK y fragmentos huérfanos)
     db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).delete()
+    delete_document_file(doc.file_path)   # borra también el archivo del folder
     db.delete(doc)
     db.commit()
     return {"mensaje": "Documento eliminado"}

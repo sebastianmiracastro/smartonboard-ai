@@ -246,6 +246,7 @@ def list_alerts(
             "user_id": a.user_id,
             "user_name": names.get(a.user_id, a.user_id),
             "motivo": a.motivo,
+            "kind": a.kind or "solicitud",
             "status": a.status,
             "created_at": a.created_at.isoformat() if a.created_at else None,
         }

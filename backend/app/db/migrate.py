@@ -48,7 +48,11 @@ COLUMNS = {
         "target_role_ids": "TEXT",
         "error_message": "TEXT",
         "file_data": "BYTEA",
+        "file_path": "VARCHAR",
         "manual_category": "VARCHAR",
+    },
+    "rrhh_alerts": {
+        "kind": "VARCHAR DEFAULT 'solicitud'",
     },
     "document_chunks": {
         "category": "VARCHAR",

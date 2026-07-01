@@ -19,7 +19,10 @@ from sqlalchemy.orm import Session
 from app.models.models import (
     EmployeeTask, EmployeePlan, Document, RRHHAlert, User, Conversation, ChatMessage,
 )
-from app.services.rag import deep_retrieve, build_rich_context, RetrievedChunk
+from app.services.rag import (
+    deep_retrieve, build_rich_context, RetrievedChunk,
+    accessible_document_ids, _load_accessible_chunks,
+)
 from app.services.tagging import categorize
 
 
@@ -191,6 +194,51 @@ class ToolContext:
                 self.sources.append(src)
 
         return build_rich_context(chunks, doc_names=doc_names)
+
+    def reconsultar_documentos(self, consulta: str) -> str:
+        """FALLBACK LÉXICO: re-lee el texto de los documentos accesibles y busca las
+        PALABRAS CLAVE de la pregunta. Sirve cuando el índice semántico (embeddings)
+        no priorizó un fragmento que SÍ contiene lo que se pregunta (p. ej. un término
+        exacto, una sigla o un dato puntual). Respeta el RBAC."""
+        self._mark(TOOL_BUSCAR)
+        words = _significant_words(consulta)
+        if not words:
+            return ""
+        doc_ids = accessible_document_ids(
+            self.db, self.company_id, self.user_is_rrhh, self.user_is_gerencia,
+            self.user_seniority_level, self.user_department_id, self.user_role_id,
+        )
+        chunks = _load_accessible_chunks(self.db, self.company_id, doc_ids)
+        if not chunks:
+            return ""
+        # Puntuación léxica: nº de palabras clave presentes en el fragmento (sin acentos).
+        scored = []
+        for ch in chunks:
+            low = _normalize(ch.content)
+            matched = sum(1 for w in words if w in low)
+            if matched:
+                scored.append((matched, ch))
+        if not scored:
+            return ""
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = [ch for _m, ch in scored[:6]]
+
+        retrieved = [
+            RetrievedChunk(content=ch.content, document_id=ch.document_id, similarity=0.0,
+                           category=ch.category, chunk_index=ch.chunk_index)
+            for ch in top
+        ]
+        self.retrieved_chunks = retrieved
+        self.matched_categories.extend(ch.category for ch in top if ch.category)
+
+        found_ids = list({ch.document_id for ch in top})
+        docs = self.db.query(Document).filter(Document.id.in_(found_ids)).all()
+        names = {d.id: d.name for d in docs}
+        for did in found_ids:
+            src = {"id": did, "name": names.get(did, did)}
+            if src not in self.sources:
+                self.sources.append(src)
+        return build_rich_context(retrieved, doc_names=names)
 
     def has_accessible_documents(self) -> bool:
         """¿El usuario tiene ALGÚN documento indexado accesible para su perfil?
@@ -439,13 +487,17 @@ class ToolContext:
         self.db.commit()
         return f"Listo, marqué como completada la tarea '{tarea.title}'. ¡Bien hecho! 🎉"
 
-    def escalar_a_rrhh(self, motivo: str) -> str:
-        """Crea una alerta para que el área de RR.HH. acompañe al empleado."""
+    def escalar_a_rrhh(self, motivo: str, kind: str = "solicitud") -> str:
+        """Crea una alerta para que el área de RR.HH. acompañe al empleado.
+
+        `kind`: 'solicitud' (el empleado pidió ayuda) o 'sin_respuesta' (el asistente
+        no encontró respuesta a su pregunta)."""
         self._mark(TOOL_ESCALAR_RRHH)
         alerta = RRHHAlert(
             company_id=self.company_id,
             user_id=self.user_id,
             motivo=(motivo or "El empleado solicitó acompañamiento de RR.HH.").strip(),
+            kind=kind,
         )
         self.db.add(alerta)
         self.db.commit()

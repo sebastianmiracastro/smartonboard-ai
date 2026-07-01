@@ -52,9 +52,14 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
             <Zap size={16} className="text-white" />
           </div>
-          <span className="text-white text-sm font-semibold tracking-tight">
-            SmartOnboard <span className="text-indigo-400">AI</span>
-          </span>
+          <div className="min-w-0">
+            <span className="text-white text-sm font-semibold tracking-tight truncate block">
+              SmartOnboard <span className="text-indigo-400">AI</span>
+            </span>
+            {user?.company_name && (
+              <span className="text-slate-500 text-[11px] truncate block">{user.company_name}</span>
+            )}
+          </div>
         </div>
 
         {/* Empleado info */}

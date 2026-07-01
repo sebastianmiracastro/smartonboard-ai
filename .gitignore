@@ -8,6 +8,9 @@ backend/.venv/
 .env
 backend/.env
 
+# Documentos subidos (se guardan en el folder, no se versionan)
+backend/uploads/
+
 # Node / Next.js
 node_modules/
 frontend/.next/

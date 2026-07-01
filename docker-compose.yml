@@ -25,6 +25,11 @@ services:
     env_file: ./backend/.env.docker
     ports:
       - "8000:8000"
+    # En desarrollo, el override monta ./backend:/app, así que los documentos subidos
+    # quedan en backend/uploads DENTRO del proyecto. En producción (sin override) se
+    # persisten con un bind-mount a la misma carpeta.
+    volumes:
+      - ./backend/uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
