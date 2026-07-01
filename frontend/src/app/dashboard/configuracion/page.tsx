@@ -16,6 +16,7 @@ export default function ConfiguracionPage() {
     model: "gpt-4o-mini",
     temperature: 0.4,
     ragTopK: 5,
+    ragMinSimilarity: 0.35,
     requireSources: true,
     allowGeneralQuestions: true,
     blockSalaryQuestions: true,
@@ -46,6 +47,7 @@ export default function ConfiguracionPage() {
           model: c.ai_model ?? prev.model,
           temperature: c.ai_temperature ?? prev.temperature,
           ragTopK: c.rag_top_k ?? prev.ragTopK,
+          ragMinSimilarity: c.rag_min_similarity ?? prev.ragMinSimilarity,
         }));
         setHasApiKey(!!c.has_api_key);
         setApiKeyPreview(c.api_key_preview ?? null);
@@ -67,6 +69,7 @@ export default function ConfiguracionPage() {
         ai_model: config.model,
         ai_temperature: config.temperature,
         rag_top_k: config.ragTopK,
+        rag_min_similarity: config.ragMinSimilarity,
       };
       // Solo tocamos la clave si el usuario escribió una nueva o pidió borrarla
       if (apiKeyInput.trim() !== "") payload.openai_api_key = apiKeyInput.trim();
@@ -299,6 +302,28 @@ export default function ConfiguracionPage() {
             <div className="flex justify-between mt-1">
               <span className="text-slate-600 text-xs">1 doc</span>
               <span className="text-slate-600 text-xs">10 docs</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex justify-between mb-1.5">
+              <label className="text-slate-300 text-sm font-medium">
+                Umbral de relevancia
+              </label>
+              <span className="text-indigo-400 text-sm">{config.ragMinSimilarity.toFixed(2)}</span>
+            </div>
+            <input
+              type="range"
+              min="0.2"
+              max="0.6"
+              step="0.05"
+              value={config.ragMinSimilarity}
+              onChange={(e) => setConfig({ ...config, ragMinSimilarity: parseFloat(e.target.value) })}
+              className="w-full accent-indigo-500"
+            />
+            <div className="flex justify-between mt-1">
+              <span className="text-slate-600 text-xs">Más cobertura</span>
+              <span className="text-slate-600 text-xs">Más preciso</span>
             </div>
           </div>
         </div>

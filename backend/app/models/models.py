@@ -22,6 +22,7 @@ class Company(Base):
     agent_name = Column(String, default="Sara")
     welcome_message = Column(Text, nullable=True)
     rag_top_k = Column(Integer, default=5)
+    rag_min_similarity = Column(Float, default=0.35)    # umbral de relevancia del RAG/extractivo (precisión ↔ cobertura)
 
     departments = relationship("Department", back_populates="company")
     users = relationship("User", back_populates="company")

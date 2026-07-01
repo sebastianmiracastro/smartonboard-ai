@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/evaluation", tags=["Evaluación"])
 TOOL_LABELS = {
     "buscar_en_documentos": "Búsqueda en documentos",
     "consultar_mis_tareas": "Consulta de tareas",
+    "consultar_mi_perfil": "Consulta de perfil",
     "completar_tarea": "Completar tarea",
     "escalar_a_rrhh": "Escalado a RR.HH.",
 }

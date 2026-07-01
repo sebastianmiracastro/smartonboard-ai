@@ -15,6 +15,7 @@ interface Message {
 const TOOL_LABELS: Record<string, string> = {
   buscar_en_documentos: "📄 Buscó en documentos",
   consultar_mis_tareas: "📋 Consultó tus tareas",
+  consultar_mi_perfil: "🪪 Buscó en la información de tu perfil",
   completar_tarea: "✅ Completó una tarea",
   escalar_a_rrhh: "🚀 Avisó a RR.HH.",
 };

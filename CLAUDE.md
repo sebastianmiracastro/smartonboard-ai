@@ -163,6 +163,56 @@ Tres nodos en el grafo:
 Categorías de preguntas: procesos, rol, cultura, herramientas, relaciones
 Niveles de profundidad: basico, intermedio, avanzado
 
+### Auto-conocimiento de la plataforma (`services/platform_kb.py`)
+
+Preguntas sobre SmartOnboard AI en sí (qué es, objetivo, alcance, modelo de IA,
+cómo funciona, resultados, autor) NO están en los documentos que sube la empresa.
+`platform_kb.py` aporta ese conocimiento de forma nativa, curado por aspecto a
+partir del informe de grado (`SmartOnBoard_AI.pdf`):
+- `agent.detect_intent` devuelve el intent `plataforma` (vía `is_platform_question`)
+  y se responde desde la base, sin tocar el RAG de la empresa.
+- Red de seguridad (`mentions_platform`): si el RAG no halla nada y la pregunta
+  alude a la plataforma, responde el conocimiento propio en vez de "no encontré".
+- Con clave de IA el LLM redacta a partir de la base; sin clave se enruta al
+  aspecto y se devuelve su párrafo curado (respuesta puntual, sin recortes).
+
+### Enrutado de intención (`agent.detect_intent`, sin LLM)
+
+Orden de prioridad (la primera que coincide gana):
+1. **social** — saludo/gracias/despedida "puro" (mensaje corto) → respuesta cálida.
+2. **escalar** / **completar** / **consultar_tareas** — acciones sobre la BD.
+3. **perfil** (`profile_topic`) — datos del propio usuario: plan, comprensión,
+   documentos accesibles (exclusivos/generales), cargo/área → `consultar_mi_perfil`.
+4. **plataforma** (`is_platform_question`) — auto-conocimiento del producto.
+5. **informativa** — RAG sobre los documentos de la empresa.
+
+La **comprensión** (`comprehension_score`) SOLO se calcula en la intención
+`informativa`; saludos y consultas de plataforma/perfil/tareas guardan `None` para
+no contaminar las métricas de conocimiento que ve RR.HH.
+
+**Plataforma vs. empresa (precedencia):** las preguntas claramente del producto
+(nombre, "esta plataforma", "qué modelo usas") van directo al KB. Las ambiguas
+pasan primero por RAG; si NO hay documentos y la pregunta menciona la plataforma o
+toca un tema intrínseco del producto (`is_product_topic`: integración, seguridad,
+roadmap, autor, estado, capacidades) → se responde desde el KB. Así los documentos
+de la empresa siempre tienen prioridad.
+
+**Follow-ups con contexto** (`augment_followup`): un seguimiento corto ("¿y uno
+general?") retoma el sustantivo del tema anterior aplicando el nuevo calificador.
+
+**Umbral de relevancia configurable** (`Company.rag_min_similarity`, default 0.35):
+se ajusta desde Configuración del agente (rango 0.2–0.6) y se pasa a
+`synthesize_answer`. Subir = más preciso; bajar = más cobertura. Junto con
+`rag_top_k`, son las perillas de precisión ↔ cobertura por empresa.
+
+### Sintetizador extractivo (`services/extractive.py`)
+
+Es la "IA de la casa" para preguntas sobre DOCUMENTOS cuando no hay clave de IA.
+Para evitar respuestas recortadas o incoherentes: filtra primero por CHUNK
+relevante (descarta pasajes poco pertinentes enteros, no frases sueltas), usa
+umbral 0.35 con corte RELATIVO a la mejor coincidencia, y recorta siempre en fin
+de oración (`clip_to_sentences`), nunca a media palabra.
+
 ---
 
 ## Credenciales de prueba

@@ -49,7 +49,34 @@ def _norm(sentence: str) -> str:
 
 
 # Por debajo de esta similitud una oración no se considera pertinente a la pregunta.
-DEFAULT_SENTENCE_THRESHOLD = 0.30
+# MiniLM asigna una similitud base ~0.30 a casi cualquier frase en español, así que
+# el umbral se fija en 0.35 para rechazar ese ruido de fondo (igual que el RAG).
+DEFAULT_SENTENCE_THRESHOLD = 0.35
+
+# Fracción de la MEJOR similitud por debajo de la cual una oración se descarta.
+# Es un umbral RELATIVO: solo se conservan oraciones cercanas a la más pertinente,
+# para que la respuesta tenga foco y no se diluya con frases apenas relacionadas.
+RELATIVE_KEEP_RATIO = 0.72
+
+# Igual, pero a nivel de CHUNK (pasaje). El score de un chunk —su mejor oración— es
+# una señal más fiable que una oración suelta, así que se descartan enteros los
+# pasajes poco relevantes; así se evita pegar frases sueltas de contextos distintos
+# (el efecto "Frankenstein" que hacía las respuestas incoherentes).
+CHUNK_KEEP_RATIO = 0.85
+
+
+def clip_to_sentences(text: str, max_chars: int = 1500) -> str:
+    """Recorta un texto SIN cortar a media frase: termina en el último final de
+    oración que quepa dentro del límite; si no hay ninguno, corta en la última
+    palabra completa. Evita los recortes extraños a mitad de palabra."""
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    window = text[:max_chars]
+    ends = list(re.finditer(r"[.!?…](?:\s|$)", window))
+    if ends:
+        return window[:ends[-1].end()].rstrip()
+    return window.rsplit(" ", 1)[0].rstrip() + "…"
 
 
 def synthesize_answer(
@@ -58,7 +85,6 @@ def synthesize_answer(
     extra_queries: Optional[List[str]] = None,
     max_sentences: int = 16,
     min_similarity: float = DEFAULT_SENTENCE_THRESHOLD,
-    min_keep: int = 5,
 ) -> str:
     """Construye una respuesta extractiva rica a partir de los fragmentos recuperados.
 
@@ -102,22 +128,40 @@ def synthesize_answer(
         scored.append((sim, i))
     scored.sort(reverse=True)
 
-    # 3) Selección: las que superan el umbral, con tope generoso; si pasan muy pocas,
-    #    conserva al menos `min_keep` (respuesta completa sin dejar brechas).
-    relevant = [i for sim, i in scored if sim >= min_similarity][:max_sentences]
-    if len(relevant) < min_keep:
-        relevant = [i for _sim, i in scored[:min_keep]]
-    selected = set(relevant)
+    best = scored[0][0]
+    if best < min_similarity:
+        # Ninguna oración es realmente pertinente: el llamador dará la respuesta honesta.
+        return ""
 
-    # 4) Reordenar por procedencia (documento más relevante primero, luego orden
-    #    natural del texto) para que la lectura sea coherente.
-    doc_best = {}
+    # 3) Filtrado por CHUNK: se puntúa cada pasaje por su mejor oración y se conservan
+    #    solo los pasajes cercanos al mejor. Así no se cuelan frases sueltas de
+    #    contextos poco relevantes (evita el efecto "Frankenstein").
+    sim_by_i = {i: sim for sim, i in scored}
+    chunk_best = {}
     for sim, i in scored:
-        d = origin[i][0]
-        doc_best[d] = max(doc_best.get(d, 0.0), sim)
+        key = (origin[i][0], origin[i][1])  # (document_id, chunk_index)
+        if sim > chunk_best.get(key, -1.0):
+            chunk_best[key] = sim
+    overall_best = max(chunk_best.values())
+    chunk_cutoff = max(min_similarity, overall_best * CHUNK_KEEP_RATIO)
+    kept_chunks = {k for k, s in chunk_best.items() if s >= chunk_cutoff}
+
+    # 4) Dentro de esos pasajes, conserva las oraciones pertinentes (umbral relativo
+    #    a la mejor) en su ORDEN original, para que cada pasaje se lea de corrido.
+    sent_cutoff = max(min_similarity, overall_best * RELATIVE_KEEP_RATIO)
+    relevant = [
+        i for i in range(len(sentences))
+        if (origin[i][0], origin[i][1]) in kept_chunks and sim_by_i[i] >= sent_cutoff
+    ]
+    if not relevant:
+        return ""
+    relevant = relevant[:max_sentences]
+
+    # Reordena: pasaje más relevante primero, luego el orden natural del texto.
     ordered = sorted(
         relevant,
-        key=lambda i: (-doc_best[origin[i][0]], origin[i][0], origin[i][1], origin[i][2]),
+        key=lambda i: (-chunk_best[(origin[i][0], origin[i][1])],
+                       origin[i][0], origin[i][1], origin[i][2]),
     )
 
     # 5) Agrupar oraciones contiguas (mismo doc, índices cercanos) en párrafos

@@ -18,6 +18,7 @@ COLUMNS = {
         "agent_name": "VARCHAR DEFAULT 'Sara'",
         "welcome_message": "TEXT",
         "rag_top_k": "INTEGER DEFAULT 5",
+        "rag_min_similarity": "FLOAT DEFAULT 0.35",
     },
     "payroll_periods": {
         "frequency": "VARCHAR",

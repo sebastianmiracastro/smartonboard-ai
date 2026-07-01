@@ -90,6 +90,7 @@ def send_message(
     company_temperature = company.ai_temperature if (company and company.ai_temperature is not None) else 0.4
     company_agent_name = (company.agent_name if company else None) or "Sara"
     company_top_k = (company.rag_top_k if company else None) or 5
+    company_min_sim = (company.rag_min_similarity if (company and company.rag_min_similarity is not None) else 0.35)
 
     # Ejecutar agente
     try:
@@ -109,6 +110,7 @@ def send_message(
             ai_temperature=company_temperature,
             agent_name=company_agent_name,
             rag_top_k=company_top_k,
+            rag_min_similarity=company_min_sim,
         )
     except Exception as e:
         print(f"Error en el agente: {e}")

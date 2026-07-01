@@ -20,6 +20,7 @@ defecto, porque su bucle multi-llamada consume muchos más tokens. Las herramien
 viven en `app/services/agent_tools.py` y comparten un `ToolContext`.
 """
 import json
+import random
 import traceback
 from collections import Counter
 from typing import List, Optional
@@ -28,15 +29,21 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from sqlalchemy.orm import Session
 
 from app.services.tagging import categorize
-from app.services.extractive import synthesize_answer
-from app.services.platform_kb import is_platform_question, mentions_platform, answer_platform_question
+from app.services.extractive import synthesize_answer, clip_to_sentences
+from app.services.platform_kb import (
+    is_platform_question, mentions_platform, is_product_topic, answer_platform_question,
+)
 from app.services.agent_tools import (
     ToolContext,
     build_langchain_tools,
+    profile_topic,
+    social_intent,
+    _normalize,
     TOOL_BUSCAR,
     TOOL_CONSULTAR_TAREAS,
     TOOL_COMPLETAR_TAREA,
     TOOL_ESCALAR_RRHH,
+    TOOL_PERFIL,
 )
 
 # ─── CLASIFICACIÓN DE LA PREGUNTA ────────────────────────────────────────────
@@ -99,6 +106,8 @@ Tu estilo:
 Tienes herramientas para ayudar mejor:
 - buscar_en_documentos: para responder con información oficial de la empresa.
 - consultar_mis_tareas: para mostrarle al empleado sus tareas de onboarding.
+- consultar_mi_perfil: para datos del propio perfil en la plataforma (si tiene plan
+  asignado, su nivel de comprensión, sus documentos accesibles/exclusivos/generales).
 - completar_tarea: para marcar una tarea como hecha cuando el empleado lo indique.
 - escalar_a_rrhh: para avisar a RR.HH. si el empleado está bloqueado o pide ayuda humana.
 
@@ -268,12 +277,20 @@ def detect_intent(question: str) -> str:
     """Enruta la pregunta SIN LLM: las acciones de tareas/escalado se resuelven en
     el backend (0 tokens) y solo lo informativo va al RAG."""
     q = question.lower()
+    # Saludo/agradecimiento/despedida "puro" (mensaje corto y social): trato cálido
+    # sin buscar en documentos ni contar para las métricas de conocimiento.
+    if social_intent(question):
+        return "social"
     if any(kw in q for kw in _ESCALAR_KW):
         return "escalar"
     if "tarea" in q and any(kw in q for kw in _COMPLETAR_KW):
         return "completar"
     if any(w in q for w in _CONSULTAR_KW):
         return "consultar_tareas"
+    # Pregunta sobre los DATOS DE PERFIL del usuario (plan, comprensión, documentos
+    # accesibles, cargo): se responde con la BD del propio perfil, no con RAG.
+    if profile_topic(question):
+        return "perfil"
     # Pregunta sobre la propia plataforma (qué es, alcance, objetivo, modelo…):
     # se responde con el conocimiento nativo del producto, no con RAG de la empresa.
     if is_platform_question(question):
@@ -281,32 +298,108 @@ def detect_intent(question: str) -> str:
     return "informativa"
 
 
+def build_social_answer(question: str, agent_name: str = "Sara") -> str:
+    """Respuesta cálida a un mensaje social (saludo/gracias/despedida). Sin LLM.
+
+    Rota entre variantes para no sonar repetitivo; todas comparten un tono y un
+    'ancla' (ofrecer ayuda) para que la experiencia sea consistente."""
+    name = (agent_name or "Sara").strip() or "Sara"
+    categoria = social_intent(question) or "saludo"
+    variantes = {
+        "gracias": [
+            "¡Con gusto! Aquí estoy para lo que necesites de tu onboarding. 😊",
+            "¡De nada! Para eso estoy. Si te surge otra duda, aquí estoy. 😊",
+            "¡Un placer ayudarte! Cuando necesites algo más, con gusto te apoyo.",
+        ],
+        "despedida": [
+            f"¡Hasta luego! Cuando necesites algo, aquí estaré. — {name}",
+            "¡Nos vemos! Aquí estaré cuando me necesites.",
+            "¡Que te vaya muy bien! Vuelve cuando quieras, seguiré por aquí.",
+        ],
+        "como_estas": [
+            "¡Muy bien, gracias por preguntar! Con ganas de ayudarte con tu onboarding. ¿Qué necesitas?",
+            "¡Todo bien por aquí y con ganas de ayudarte! ¿En qué andas?",
+        ],
+        "saludo": [
+            f"¡Hola! Soy {name}, tu asistente de onboarding. ¿En qué te ayudo hoy? "
+            "Puedo resolver dudas sobre la empresa, mostrarte tus tareas o contarte cómo funciona la plataforma.",
+            f"¡Hola! Qué bueno tenerte por aquí. Soy {name} y estoy para ayudarte con tu onboarding: "
+            "dudas de la empresa, tus tareas o cómo funciona la plataforma.",
+            f"¡Hey! Soy {name}. ¿En qué puedo ayudarte hoy? Puedo responder tus dudas, "
+            "mostrarte tus tareas o explicarte la plataforma.",
+        ],
+    }
+    return random.choice(variantes[categoria])
+
+
+# ─── SEGUIMIENTO CON CONTEXTO (follow-ups cortos) ────────────────────────────
+
+_FOLLOWUP_QUALIFIERS = ["general", "exclusiv", "otro", "otra", "otros", "otras",
+                        "cuantos", "cuantas", "cual", "cuales"]
+
+
+def augment_followup(question: str, history: Optional[List[dict]]) -> str:
+    """Resuelve seguimientos cortos que retoman el tema anterior. P. ej., tras
+    "¿tengo un documento exclusivo?" un "¿y uno general?" no tiene sustantivo; se le
+    antepone el tema de la última pregunta del usuario para que enrute bien y aplique
+    el NUEVO calificador (general), no el viejo."""
+    if not history:
+        return question
+    nq = _normalize(question)
+    words = nq.split()
+    if len(words) > 5:
+        return question
+    starts = nq.startswith(("y ", "y,", "y?")) or nq in ("y", "y?")
+    only_qualifier = any(w in nq for w in _FOLLOWUP_QUALIFIERS)
+    if not (starts or only_qualifier):
+        return question
+    last_user = next((h["content"] for h in reversed(history) if h.get("role") == "user"), None)
+    if not last_user:
+        return question
+    # Antepone SOLO el sustantivo del tema anterior (no la pregunta entera), para
+    # que el calificador vigente sea el de la pregunta actual.
+    prefijo = {"documentos": "documentos", "plan": "mi plan",
+               "comprension": "mi comprension"}.get(profile_topic(last_user))
+    if prefijo:
+        return f"{prefijo} {question}"
+    if is_platform_question(last_user):
+        return f"{last_user} {question}"
+    return question
+
+
 def _run_heuristic_router(question: str, ctx: ToolContext) -> str:
     """Camino sin key: misma intención, pero la parte informativa cae al mock."""
     intent = detect_intent(question)
+    if intent == "social":
+        return build_social_answer(question)
     if intent == "escalar":
         return ctx.escalar_a_rrhh(question)
     if intent == "completar":
         return ctx.completar_tarea(question)
     if intent == "consultar_tareas":
         return ctx.consultar_mis_tareas()
+    if intent == "perfil":
+        return ctx.consultar_mi_perfil(question)
     if intent == "plataforma":
         return answer_platform_question(question, api_key=None)
     extra_queries = expand_queries(question, api_key=None)
     context = ctx.buscar_en_documentos(question, queries=extra_queries)
     # Red de seguridad: sin resultados en los documentos y la pregunta alude a la
     # plataforma → responde el conocimiento propio en vez de "no encontré nada".
-    if not ctx.sources and mentions_platform(question):
+    if not ctx.sources and (mentions_platform(question) or is_product_topic(question)):
         return answer_platform_question(question, api_key=None)
     return _extractive_or_mock(question, ctx, extra_queries, context if ctx.sources else "")
 
 
-def _extractive_or_mock(question, ctx, extra_queries, grounding: str) -> str:
+def _extractive_or_mock(question, ctx, extra_queries, grounding: str,
+                        min_similarity: float = 0.35) -> str:
     """Respuesta sin LLM: primero intenta el sintetizador extractivo propio (rico,
     reorganiza oraciones de varios fragmentos); si no hay material aprovechable, cae
-    al mensaje de orientación."""
+    al mensaje de orientación. `min_similarity` viene de la config de la empresa."""
     if ctx.sources and ctx.retrieved_chunks:
-        synthesized = synthesize_answer(question, ctx.retrieved_chunks, extra_queries)
+        synthesized = synthesize_answer(
+            question, ctx.retrieved_chunks, extra_queries, min_similarity=min_similarity
+        )
         if synthesized:
             return synthesized
     return generate_mock_answer(question, grounding)
@@ -320,11 +413,10 @@ def generate_mock_answer(question: str, context: str) -> str:
     material relevante completo en vez de un recorte. Si no hay contexto, NO inventa
     políticas ni cifras: orienta a dónde buscar."""
     if context:
-        # Limpiar los encabezados de documento y limitar a un tamaño legible
+        # Limpiar los encabezados de documento y limitar a un tamaño legible,
+        # cortando SIEMPRE en un final de oración (nunca a media palabra/frase).
         cleaned = context.replace("=== Documento:", "📄").replace("===", "").strip()
-        snippet = cleaned[:1500].rstrip()
-        if len(cleaned) > 1500:
-            snippet = snippet.rsplit(" ", 1)[0] + "…"
+        snippet = clip_to_sentences(cleaned, 1500)
         return (
             "Esto es lo que encontré en la documentación de la empresa sobre tu "
             f"consulta:\n\n{snippet}\n\n"
@@ -396,6 +488,7 @@ def run_agent(
     ai_temperature: float = 0.4,
     agent_name: str = "Sara",
     rag_top_k: int = 5,
+    rag_min_similarity: float = 0.35,
 ) -> dict:
     ctx = ToolContext(
         db=db,
@@ -415,21 +508,31 @@ def run_agent(
     # No se lee del entorno: sin clave activa, responde el sintetizador extractivo propio.
     api_key = openai_api_key
 
+    # Seguimiento con contexto: un follow-up corto ("¿y uno general?") retoma el tema
+    # de la última pregunta. Se enruta y se responde sobre la versión enriquecida.
+    rq = augment_followup(question, history)
+
     # Enrutado en el backend: las acciones se resuelven sin LLM; solo lo informativo
     # consume tokens, y con contexto MINIFICADO (rol + tema + relevancia).
-    intent = detect_intent(question)
+    intent = detect_intent(rq)
 
-    if intent == "escalar":
+    if intent == "social":
+        answer = build_social_answer(question, agent_name)
+    elif intent == "escalar":
         answer = ctx.escalar_a_rrhh(question)
     elif intent == "completar":
         answer = ctx.completar_tarea(question)
     elif intent == "consultar_tareas":
         answer = ctx.consultar_mis_tareas()
+    elif intent == "perfil":
+        # Datos del propio perfil en la plataforma (plan, comprensión, documentos):
+        # salen de la BD; no requieren LLM ni RAG.
+        answer = ctx.consultar_mi_perfil(rq)
     elif intent == "plataforma":
         # Auto-conocimiento del producto: se responde con la base nativa de la
         # plataforma (con clave redacta el LLM; sin clave, respuesta curada offline).
         answer = answer_platform_question(
-            question, api_key=api_key, model=ai_model,
+            rq, api_key=api_key, model=ai_model,
             temperature=ai_temperature, agent_name=agent_name, history=history or [],
         )
     else:
@@ -440,11 +543,12 @@ def run_agent(
         # 2) Recuperación profunda con todas las consultas.
         context = ctx.buscar_en_documentos(question, queries=extra_queries)
         grounding = context if ctx.sources else ""
-        if not ctx.sources and mentions_platform(question):
+        if not ctx.sources and (mentions_platform(rq) or is_product_topic(rq)):
             # Red de seguridad: sin soporte documental y la pregunta alude a la
-            # plataforma → conocimiento propio en vez de "no encontré nada".
+            # plataforma o toca un tema intrínseco del producto (integración,
+            # seguridad, roadmap…) → conocimiento propio en vez de "no encontré".
             answer = answer_platform_question(
-                question, api_key=api_key, model=ai_model,
+                rq, api_key=api_key, model=ai_model,
                 temperature=ai_temperature, agent_name=agent_name, history=history or [],
             )
         elif api_key:
@@ -460,17 +564,25 @@ def run_agent(
                 # el error completo para diagnóstico y se cae al modo demo.
                 print("⚠️  La llamada al LLM falló; se usa el sintetizador extractivo. Detalle:")
                 traceback.print_exc()
-                answer = _extractive_or_mock(question, ctx, extra_queries, grounding)
+                answer = _extractive_or_mock(question, ctx, extra_queries, grounding,
+                                             min_similarity=rag_min_similarity)
         else:
             # Sin clave de IA: responde el sintetizador extractivo propio (offline).
-            answer = _extractive_or_mock(question, ctx, extra_queries, grounding)
+            answer = _extractive_or_mock(question, ctx, extra_queries, grounding,
+                                         min_similarity=rag_min_similarity)
 
     # Clasificación grounded: la categoría real de los chunks recuperados manda;
     # si no hubo documentos, cae a la categoría inferida de la pregunta.
     matched_category = _majority(ctx.matched_categories)
     final_category = matched_category or category
     has_docs = bool(ctx.matched_categories)
-    comprehension = compute_comprehension(ctx.answer_confidence, has_docs, ctx.tools_used)
+    # La comprensión SOLO se mide en preguntas de conocimiento (informativa): los
+    # saludos y las consultas de plataforma/perfil/tareas no son señal de cuánto
+    # entiende el empleado del contenido, así que no contaminan la métrica.
+    if intent == "informativa":
+        comprehension = compute_comprehension(ctx.answer_confidence, has_docs, ctx.tools_used)
+    else:
+        comprehension = None
 
     return {
         "answer": answer,

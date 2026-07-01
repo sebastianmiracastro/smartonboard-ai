@@ -15,6 +15,7 @@ de grado (SmartOnBoard_AI.pdf), sin depender de que nadie suba documentación:
       y se devuelve su párrafo curado completo. Responde puntualmente, siempre da
       en el blanco y nunca queda cortado a media frase.
 """
+import random
 from typing import List, Optional
 
 
@@ -104,10 +105,23 @@ ASPECTS = {
         "Grancolombiano (Bogotá, Colombia), presentado en 2026 como trabajo de grado de Ingeniería de "
         "Software."
     ),
-    "legal": (
-        "Como procesa documentos corporativos e información de empleados, la plataforma considera la "
-        "Ley 1581 de 2012 de protección de datos personales de Colombia: aplica control de acceso por "
-        "roles, aislamiento de la información por empresa y autenticación de los usuarios."
+    "integraciones": (
+        "SmartOnboard AI sincroniza las tareas de onboarding con Jira, de modo que un paso puede "
+        "reflejar su estado desde el tablero de la empresa. Como trabajo futuro se contemplan la "
+        "integración con Google Calendar para agendar tareas y las notificaciones por correo "
+        "(por ejemplo con SendGrid)."
+    ),
+    "seguridad": (
+        "La seguridad se apoya en tres pilares: control de acceso por roles (RBAC), que filtra la "
+        "información antes de la búsqueda para que nunca veas documentos sin permiso; aislamiento de "
+        "los datos por empresa (multi-tenant); y autenticación con JWT. Además, el proyecto considera "
+        "la Ley 1581 de 2012 de protección de datos personales de Colombia, con sus principios de "
+        "finalidad, acceso restringido y seguridad de la información."
+    ),
+    "roadmap": (
+        "Trabajo futuro previsto: usar el tipo vector nativo de pgvector, integración real con Jira y "
+        "Google Calendar, notificaciones por correo, alertas automáticas a RR.HH. cuando baja la "
+        "comprensión de un empleado, y fine-tuning continuo del modelo con las conversaciones reales."
     ),
 }
 
@@ -145,6 +159,13 @@ _IDENTITY_PHRASES = [
     "qué modelo usas", "que modelo usas", "qué modelo de ia", "que modelo de ia",
     "modelo de ia usas", "modelo usas", "modelo utilizas", "qué ia usas",
     "que ia usas", "qué ia eres", "que ia eres", "modelo de lenguaje",
+    # Preguntas dirigidas al producto (integración, seguridad, roadmap)
+    "te integras", "integras con", "tienes integración", "tienes integracion",
+    "qué integraciones", "que integraciones", "te conectas con", "eres seguro",
+    "eres segura", "qué tan seguro eres", "que tan seguro eres", "mis datos están seguros",
+    "mis datos estan seguros", "cómo proteges", "como proteges", "qué viene después",
+    "que viene despues", "trabajo futuro", "qué falta por hacer", "que falta por hacer",
+    "vas a tener", "vas a integrar",
 ]
 
 # Interrogativos de significado/propósito (para combinar con una referencia meta).
@@ -198,14 +219,17 @@ def is_platform_question(question: str) -> bool:
 # Prioridad: los aspectos más específicos primero, para que ganen sobre los
 # genéricos cuando ambos podrían coincidir.
 _ASPECT_ORDER = [
-    "autor", "capacidades", "resultados", "estado", "legal", "modelo",
-    "tecnologia", "funcionamiento", "alcance", "objetivo", "roles", "identidad",
+    "autor", "capacidades", "resultados", "estado", "roadmap", "integraciones",
+    "seguridad", "modelo", "tecnologia", "funcionamiento", "alcance", "objetivo",
+    "roles", "identidad",
 ]
 
 _ASPECT_KEYWORDS = {
     "autor": ["quién creó", "quien creo", "quién hizo", "quien hizo", "quién desarrolló",
               "quien desarrollo", "autor", "creador", "de quién es", "de quien es",
-              "quién lo hizo", "quien lo hizo", "quién está detrás", "quien esta detras"],
+              "quién lo hizo", "quien lo hizo", "quién está detrás", "quien esta detras",
+              "lo creó", "lo creo", "la creó", "la creo", "quién lo desarrolló",
+              "quien lo desarrollo", "quién los hizo", "quien los hizo"],
     "capacidades": ["en qué me ayud", "en que me ayud", "qué puedes hacer", "que puedes hacer",
                     "qué haces", "que haces", "para qué sirves", "para que sirves",
                     "cómo me ayudas", "como me ayudas", "en qué me puedes", "en que me puedes",
@@ -216,9 +240,17 @@ _ASPECT_KEYWORDS = {
     "estado": ["estado del proyecto", "en qué fase", "en que fase", "qué fase", "que fase",
                "en qué va", "en que va", "avance", "está terminado", "esta terminado",
                "está completo", "esta completo", "progreso del proyecto", "qué falta"],
-    "legal": ["datos personales", "privacidad", "protección de datos", "proteccion de datos",
-              "ley 1581", "1581", "es seguro", "es segura", "seguridad de", "confidencial",
-              "mis datos"],
+    "roadmap": ["roadmap", "trabajo futuro", "a futuro", "proximamente", "próximamente",
+                "que viene", "qué viene", "tendra", "tendrá", "habra", "habrá",
+                "van a agregar", "piensan agregar", "proximas funciones", "próximas funciones",
+                "mejoras futuras", "planeado", "que sigue", "qué sigue"],
+    "integraciones": ["integra", "integración", "integracion", "integraciones", "jira",
+                      "calendar", "google calendar", "correo", "email", "notificacion",
+                      "notificación", "notificaciones", "sendgrid", "se conecta", "conecta con",
+                      "te conectas", "sincroniza"],
+    "seguridad": ["seguro", "segura", "seguridad", "gdpr", "datos personales", "privacidad",
+                  "protección de datos", "proteccion de datos", "ley 1581", "1581",
+                  "confidencial", "mis datos", "cifrado", "proteges", "protege mis"],
     "modelo": ["modelo", "qué ia", "que ia", "inteligencia artificial", "gpt", "openai", "llm",
                "fine-tuning", "fine tuning", "ajuste fino", "lora", "embedding", "ragas",
                "langgraph", "red neuronal"],
@@ -250,6 +282,29 @@ def _select_aspects(question: str) -> List[str]:
     return [a for a in _ASPECT_ORDER if any(kw in q for kw in _ASPECT_KEYWORDS[a])]
 
 
+# Aspectos INTRÍNSECOS del producto (poco probables como consulta de la empresa).
+# Se usan como red de seguridad: si el RAG no halló documentos y la pregunta toca
+# uno de estos temas, se responde desde el conocimiento propio. Se dejan fuera los
+# ambiguos (objetivo, alcance, resultados, tecnología, funcionamiento, roles,
+# identidad) para no secuestrar preguntas legítimas de la empresa.
+_FALLBACK_ASPECTS = {"integraciones", "seguridad", "roadmap", "autor", "estado", "capacidades"}
+
+
+def is_product_topic(question: str) -> bool:
+    """True si la pregunta toca un tema intrínseco del producto (integración,
+    seguridad, roadmap, autor, estado, capacidades). Red de seguridad sobre RAG."""
+    return any(a in _FALLBACK_ASPECTS for a in _select_aspects(question))
+
+
+# Cierres variados para que la respuesta no suene repetitiva en demo.
+_CLOSINGS = [
+    "¿Quieres que profundice en algo más (objetivo, alcance, cómo funciona o el modelo de IA)?",
+    "Si quieres, te cuento más sobre su alcance, cómo funciona o el modelo de IA que uso.",
+    "¿Te sirve, o prefieres que entre en algún detalle (funcionamiento, seguridad, resultados)?",
+    "Pregúntame lo que quieras: objetivo, alcance, integraciones, seguridad o cómo funciona por dentro.",
+]
+
+
 def _offline_answer(question: str, agent_name: str) -> str:
     """Responde SIN LLM enrutando al aspecto pedido. Devuelve el párrafo curado
     completo del aspecto (o el resumen de identidad si no reconoce el aspecto)."""
@@ -261,10 +316,7 @@ def _offline_answer(question: str, agent_name: str) -> str:
         # Uno o dos aspectos como máximo: puntual, sin convertirse en un muro de texto.
         parts = [ASPECTS[a] for a in hits[:2]]
     body = "\n\n".join(parts)
-    return (
-        f"{body}\n\nSoy {name}, tu asistente dentro de la plataforma. "
-        "¿Quieres que profundice en algo más (objetivo, alcance, cómo funciona o el modelo de IA)?"
-    )
+    return f"{body}\n\nSoy {name}, tu asistente dentro de la plataforma. {random.choice(_CLOSINGS)}"
 
 
 # ─── RESPUESTA CON LLM ───────────────────────────────────────────────────────

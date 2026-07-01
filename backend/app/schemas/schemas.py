@@ -38,6 +38,7 @@ class AgentConfigOut(BaseModel):
     ai_model: str
     ai_temperature: float
     rag_top_k: int
+    rag_min_similarity: float
     has_api_key: bool
     api_key_preview: Optional[str] = None
 
@@ -47,6 +48,7 @@ class AgentConfigUpdate(BaseModel):
     ai_model: Optional[str] = None
     ai_temperature: Optional[float] = None
     rag_top_k: Optional[int] = None
+    rag_min_similarity: Optional[float] = None
     # None = no tocar la clave; "" = borrarla; cualquier otro valor = guardarla
     openai_api_key: Optional[str] = None
 

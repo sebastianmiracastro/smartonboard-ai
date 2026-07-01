@@ -35,6 +35,7 @@ def _to_out(company: Company) -> AgentConfigOut:
         ai_model=company.ai_model or "gpt-4o-mini",
         ai_temperature=company.ai_temperature if company.ai_temperature is not None else 0.4,
         rag_top_k=company.rag_top_k or 5,
+        rag_min_similarity=company.rag_min_similarity if company.rag_min_similarity is not None else 0.35,
         has_api_key=bool(company.openai_api_key),
         api_key_preview=_mask(company.openai_api_key),
     )
@@ -85,6 +86,9 @@ def update_agent_config(
         company.ai_temperature = max(0.0, min(1.0, data.ai_temperature))
     if data.rag_top_k is not None:
         company.rag_top_k = max(1, min(10, data.rag_top_k))
+    if data.rag_min_similarity is not None:
+        # Rango útil para MiniLM: por debajo de 0.2 entra ruido, por encima de 0.6 corta demasiado.
+        company.rag_min_similarity = max(0.2, min(0.6, data.rag_min_similarity))
 
     # Clave: None = no tocar, "" = borrar, otro valor = guardar.
     # Ignoramos el valor enmascarado por si la UI lo reenvía sin cambios.
